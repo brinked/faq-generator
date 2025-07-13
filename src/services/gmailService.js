@@ -44,9 +44,25 @@ class GmailService {
   async getTokens(code) {
     try {
       logger.info('Attempting to exchange authorization code for tokens');
+      logger.info('OAuth2 client redirect URI:', this.oauth2Client.redirectUri);
+      logger.info('Code length:', code ? code.length : 'no code');
       
       // The correct way to exchange the code for tokens
-      const { tokens } = await this.oauth2Client.getToken(code);
+      const response = await this.oauth2Client.getToken(code);
+      
+      // Log the full response for debugging
+      logger.info('OAuth2 getToken response:', {
+        hasTokens: !!response.tokens,
+        hasRes: !!response.res,
+        responseKeys: response ? Object.keys(response) : []
+      });
+      
+      if (!response || !response.tokens) {
+        logger.error('Invalid OAuth response structure:', response);
+        throw new Error('OAuth response does not contain tokens');
+      }
+      
+      const { tokens } = response;
       
       logger.info('Successfully obtained tokens:', {
         hasAccessToken: !!tokens.access_token,
@@ -56,9 +72,17 @@ class GmailService {
       
       return tokens;
     } catch (error) {
-      logger.error('Error getting Gmail tokens:', error.message);
-      logger.error('Full error details:', error);
-      throw new Error('Failed to exchange authorization code for tokens');
+      logger.error('Error getting Gmail tokens:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        stack: error.stack
+      });
+      
+      // Re-throw the original error with more context
+      const enhancedError = new Error(`Failed to exchange authorization code for tokens: ${error.message}`);
+      enhancedError.originalError = error;
+      throw enhancedError;
     }
   }
 

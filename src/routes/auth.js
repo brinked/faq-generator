@@ -85,7 +85,16 @@ router.get('/gmail/callback', async (req, res) => {
     }
 
     // Exchange code for tokens
-    const tokens = await gmailService.getTokens(code);
+    let tokens;
+    try {
+      tokens = await gmailService.getTokens(code);
+    } catch (tokenError) {
+      logger.error('Failed to get Gmail tokens:', {
+        error: tokenError.message,
+        originalError: tokenError.originalError
+      });
+      return res.redirect(`${corsOrigin}/?error=token_exchange_failed&details=${encodeURIComponent(tokenError.message)}`);
+    }
     
     // Set credentials and get user profile
     gmailService.setCredentials(tokens);
