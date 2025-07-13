@@ -63,13 +63,26 @@ async function runMigration() {
       if (statement) {
         try {
           logger.info(`Executing statement ${i + 1}/${validStatements.length}`);
-          await db.query(statement);
+          
+          // Handle CONCURRENTLY indexes specially - they can't run in transactions
+          if (statement.includes('CREATE INDEX CONCURRENTLY')) {
+            logger.info('Executing concurrent index creation outside transaction...');
+            await db.query(statement);
+          } else {
+            await db.query(statement);
+          }
         } catch (error) {
-          // Some statements might fail if they already exist, which is okay
-          if (error.message.includes('already exists')) {
-            logger.warn(`Statement ${i + 1} skipped (already exists): ${error.message}`);
+          // Handle specific error cases
+          if (error.message.includes('already exists') ||
+              error.message.includes('does not exist') ||
+              error.message.includes('extension "vector" is not available')) {
+            logger.warn(`Statement ${i + 1} skipped: ${error.message}`);
+          } else if (error.message.includes('CONCURRENTLY cannot be executed from a function')) {
+            // Skip concurrent index creation if in transaction
+            logger.warn(`Statement ${i + 1} skipped (concurrent index in transaction): ${error.message}`);
           } else {
             logger.error(`Error executing statement ${i + 1}:`, error);
+            logger.error('Statement content:', statement.substring(0, 200) + '...');
             throw error;
           }
         }

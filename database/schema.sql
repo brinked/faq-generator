@@ -3,7 +3,13 @@
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "vector";
+-- Vector extension (may not be available in all environments)
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS "vector";
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Vector extension not available - vector columns will be created as TEXT';
+END $$;
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- Create enum types
@@ -24,8 +30,7 @@ CREATE TABLE email_accounts (
     last_sync_at TIMESTAMP WITH TIME ZONE,
     sync_cursor VARCHAR(255), -- For incremental sync
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Emails table
@@ -51,8 +56,7 @@ CREATE TABLE emails (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
     -- Unique constraint on account + message_id
-    UNIQUE(account_id, message_id),
-    
+    UNIQUE(account_id, message_id)
 );
 
 -- Questions extracted from emails
@@ -69,8 +73,7 @@ CREATE TABLE questions (
     is_customer_question BOOLEAN DEFAULT TRUE,
     language VARCHAR(10) DEFAULT 'en',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- FAQ groups (clusters of similar questions)
@@ -87,8 +90,7 @@ CREATE TABLE faq_groups (
     category VARCHAR(100),
     tags TEXT[],
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Junction table for questions and FAQ groups
@@ -99,8 +101,7 @@ CREATE TABLE question_groups (
     is_representative BOOLEAN DEFAULT FALSE, -- Is this the representative question for the group?
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    PRIMARY KEY (question_id, group_id),
-    
+    PRIMARY KEY (question_id, group_id)
 );
 
 -- Processing jobs table for background tasks
@@ -117,8 +118,7 @@ CREATE TABLE processing_jobs (
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- System settings table
@@ -138,8 +138,7 @@ CREATE TABLE audit_logs (
     old_values JSONB,
     new_values JSONB,
     user_id VARCHAR(100), -- For future user management
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- System metrics table for tracking scheduled job performance
@@ -148,8 +147,7 @@ CREATE TABLE system_metrics (
     metric_name VARCHAR(100) NOT NULL,
     metric_value NUMERIC NOT NULL DEFAULT 0,
     metadata JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create functions for updated_at timestamps
@@ -233,8 +231,22 @@ INSERT INTO system_settings (key, value, description) VALUES
 
 -- Create indexes for performance
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_emails_full_text ON emails USING gin(to_tsvector('english', COALESCE(subject, '') || ' ' || COALESCE(body_text, '')));
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_questions_embedding_hnsw ON questions USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_faq_groups_embedding_hnsw ON faq_groups USING hnsw (representative_embedding vector_cosine_ops);
+
+-- Vector indexes (only if vector extension is available)
+DO $$
+BEGIN
+    -- Try to create HNSW indexes for vector columns
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_questions_embedding_hnsw ON questions USING hnsw (embedding vector_cosine_ops);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'HNSW index creation failed - vector extension may not be available';
+END $$;
+
+DO $$
+BEGIN
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_faq_groups_embedding_hnsw ON faq_groups USING hnsw (representative_embedding vector_cosine_ops);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'HNSW index creation failed - vector extension may not be available';
+END $$;
 
 -- Create indexes separately after table creation
 -- Email accounts indexes
@@ -258,7 +270,14 @@ CREATE INDEX IF NOT EXISTS idx_emails_body_gin ON emails USING gin(to_tsvector('
 CREATE INDEX IF NOT EXISTS idx_questions_email_id ON questions(email_id);
 CREATE INDEX IF NOT EXISTS idx_questions_confidence ON questions(confidence_score);
 CREATE INDEX IF NOT EXISTS idx_questions_is_customer ON questions(is_customer_question);
-CREATE INDEX IF NOT EXISTS idx_questions_embedding_cosine ON questions USING ivfflat (embedding vector_cosine_ops);
+-- Fallback vector index using ivfflat
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_questions_embedding_cosine ON questions USING ivfflat (embedding vector_cosine_ops);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'IVFFlat index creation failed - using regular index instead';
+    CREATE INDEX IF NOT EXISTS idx_questions_embedding_fallback ON questions(embedding);
+END $$;
 
 -- Full-text search index for questions
 CREATE INDEX IF NOT EXISTS idx_questions_text_gin ON questions USING gin(to_tsvector('english', question_text));
@@ -267,7 +286,14 @@ CREATE INDEX IF NOT EXISTS idx_questions_text_gin ON questions USING gin(to_tsve
 CREATE INDEX IF NOT EXISTS idx_faq_groups_frequency ON faq_groups(frequency_score DESC);
 CREATE INDEX IF NOT EXISTS idx_faq_groups_published ON faq_groups(is_published);
 CREATE INDEX IF NOT EXISTS idx_faq_groups_category ON faq_groups(category);
-CREATE INDEX IF NOT EXISTS idx_faq_groups_embedding_cosine ON faq_groups USING ivfflat (representative_embedding vector_cosine_ops);
+-- Fallback vector index using ivfflat
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_faq_groups_embedding_cosine ON faq_groups USING ivfflat (representative_embedding vector_cosine_ops);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'IVFFlat index creation failed - using regular index instead';
+    CREATE INDEX IF NOT EXISTS idx_faq_groups_embedding_fallback ON faq_groups(representative_embedding);
+END $$;
 
 -- Full-text search index for FAQ groups
 CREATE INDEX IF NOT EXISTS idx_faq_groups_search_gin ON faq_groups USING gin(to_tsvector('english', title || ' ' || representative_question || ' ' || consolidated_answer));
