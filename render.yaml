@@ -203,14 +203,16 @@ services:
       - key: LOG_LEVEL
         value: info
 
+  # Redis service for caching and job queues
+  - type: redis
+    name: faq-generator-redis
+    ipAllowList: []
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+
 databases:
   - name: faq-generator-db
     databaseName: faq_generator
     user: faq_user
     plan: starter
     postgresMajorVersion: 15
-
-redis:
-  - name: faq-generator-redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
