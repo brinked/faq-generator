@@ -67,7 +67,10 @@ class GmailService {
       logger.info('Successfully obtained tokens:', {
         hasAccessToken: !!tokens.access_token,
         hasRefreshToken: !!tokens.refresh_token,
-        expiresIn: tokens.expiry_date
+        expiryDate: tokens.expiry_date,
+        expiresIn: tokens.expires_in,
+        tokenType: tokens.token_type,
+        allKeys: Object.keys(tokens)
       });
       
       return tokens;

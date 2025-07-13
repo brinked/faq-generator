@@ -100,6 +100,19 @@ router.get('/gmail/callback', async (req, res) => {
     gmailService.setCredentials(tokens);
     const profile = await gmailService.getUserProfile();
     
+    // Calculate token expiry - Gmail tokens can have either expiry_date or expires_in
+    let tokenExpiresAt;
+    if (tokens.expiry_date) {
+      // expiry_date is already a timestamp in milliseconds
+      tokenExpiresAt = new Date(tokens.expiry_date);
+    } else if (tokens.expires_in) {
+      // expires_in is seconds from now
+      tokenExpiresAt = new Date(Date.now() + (tokens.expires_in * 1000));
+    } else {
+      // Default to 1 hour from now if no expiry info
+      tokenExpiresAt = new Date(Date.now() + (3600 * 1000));
+    }
+    
     // Create or update account
     const accountData = {
       email_address: profile.email,
@@ -107,7 +120,7 @@ router.get('/gmail/callback', async (req, res) => {
       display_name: profile.name,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
-      token_expires_at: new Date(Date.now() + (tokens.expires_in * 1000))
+      token_expires_at: tokenExpiresAt
     };
     
     const account = await emailService.createOrUpdateAccount(accountData);
@@ -165,6 +178,16 @@ router.get('/outlook/callback', async (req, res) => {
     // Get user profile
     const profile = await outlookService.getUserProfile(tokens.access_token);
     
+    // Calculate token expiry - Outlook tokens typically have expires_in
+    let tokenExpiresAt;
+    if (tokens.expires_in) {
+      // expires_in is seconds from now
+      tokenExpiresAt = new Date(Date.now() + (tokens.expires_in * 1000));
+    } else {
+      // Default to 1 hour from now if no expiry info
+      tokenExpiresAt = new Date(Date.now() + (3600 * 1000));
+    }
+    
     // Create or update account
     const accountData = {
       email_address: profile.mail || profile.userPrincipalName,
@@ -172,7 +195,7 @@ router.get('/outlook/callback', async (req, res) => {
       display_name: profile.displayName,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
-      token_expires_at: new Date(Date.now() + (tokens.expires_in * 1000))
+      token_expires_at: tokenExpiresAt
     };
     
     const account = await emailService.createOrUpdateAccount(accountData);
