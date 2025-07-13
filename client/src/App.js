@@ -112,16 +112,6 @@ function App() {
     }
   }, []);
 
-  // Check if we should render the app
-  const urlParams = new URLSearchParams(window.location.search);
-  const isOAuthCallback = urlParams.get('success') || urlParams.get('error');
-  const isPopup = window.opener !== null || window.name === 'oauth';
-  
-  // Don't render the app if we're in an OAuth popup
-  if (isPopup && isOAuthCallback) {
-    return null;
-  }
-
   // Initialize socket connection and load initial data
   useEffect(() => {
     
@@ -300,6 +290,16 @@ function App() {
         <LoadingSpinner size="large" />
       </div>
     );
+  }
+
+  // Check if we're in an OAuth popup after all hooks have been called
+  const urlParams = new URLSearchParams(window.location.search);
+  const isOAuthCallback = urlParams.get('success') || urlParams.get('error');
+  const isPopup = window.opener !== null || window.name === 'oauth';
+  
+  // Don't render the main app if we're in an OAuth popup
+  if (isPopup && isOAuthCallback) {
+    return null;
   }
 
   return (
