@@ -1,0 +1,22 @@
+{
+  "timeout": 10000,
+  "recursive": true,
+  "spec": "tests/**/*.test.js",
+  "require": [
+    "tests/setup.js"
+  ],
+  "reporter": "spec",
+  "exit": true,
+  "bail": false,
+  "slow": 2000,
+  "grep": "",
+  "invert": false,
+  "checkLeaks": true,
+  "globals": [
+    "expect",
+    "sinon"
+  ],
+  "env": {
+    "NODE_ENV": "test"
+  }
+}
