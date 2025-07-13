@@ -10,6 +10,37 @@ const gmailService = new GmailService();
 const outlookService = new OutlookService();
 
 /**
+ * Get authentication options and available endpoints
+ */
+router.get('/', (req, res) => {
+  res.json({
+    message: 'FAQ Generator Authentication API',
+    available_endpoints: {
+      gmail: {
+        auth_url: '/api/auth/gmail/url',
+        callback: '/api/auth/gmail/callback',
+        description: 'Gmail OAuth 2.0 authentication'
+      },
+      outlook: {
+        auth_url: '/api/auth/outlook/url',
+        callback: '/api/auth/outlook/callback',
+        description: 'Outlook OAuth 2.0 authentication'
+      },
+      account_management: {
+        test: 'POST /api/auth/test/:accountId',
+        refresh: 'POST /api/auth/refresh/:accountId',
+        disconnect: 'DELETE /api/auth/disconnect/:accountId'
+      }
+    },
+    usage: {
+      step1: 'GET /api/auth/gmail/url or /api/auth/outlook/url to get authorization URL',
+      step2: 'User visits authorization URL and grants permissions',
+      step3: 'OAuth callback automatically handles token exchange and account creation'
+    }
+  });
+});
+
+/**
  * Get Gmail authorization URL
  */
 router.get('/gmail/url', async (req, res) => {
