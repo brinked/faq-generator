@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "echo 'No build step required for Node.js app'",
     "dev": "nodemon server.js",
     "test": "mocha tests/**/*.test.js --timeout 10000 --recursive",
     "test:watch": "mocha tests/**/*.test.js --timeout 10000 --recursive --watch",
