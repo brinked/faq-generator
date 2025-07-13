@@ -105,6 +105,12 @@ JOB_CONCURRENCY=5
    - **Environment**: Node
 4. Add all the environment variables listed above in the Render dashboard
 5. Deploy the service
+6. **Initialize the database** (one-time setup):
+   - Create a new **Job** service in Render (not a Web Service)
+   - Set **Build Command**: `npm install`
+   - Set **Start Command**: `node scripts/init-production-db.js`
+   - Add the same environment variables (especially DATABASE_URL)
+   - Run this job once to create all database tables
 
 ### For Heroku
 
@@ -126,6 +132,7 @@ JOB_CONCURRENCY=5
 - **BASE_URL**: This is the most critical environment variable. It must match your production domain exactly
 - **OAuth Redirect URIs**: Must be configured in both your OAuth provider (Google/Microsoft) and match the BASE_URL
 - **Database**: Ensure your production database is properly configured and accessible
+- **Database Initialization**: Run the database initialization job once before starting the main service
 - **Security**: Use strong, unique values for all secret keys
 - **HTTPS**: OAuth providers require HTTPS for production redirect URIs
 
@@ -144,11 +151,30 @@ If you're getting OAuth errors:
 1. Verify DATABASE_URL is correct
 2. Check that your database server allows connections from your deployment platform
 3. Ensure the database exists and has the correct schema
+4. **If you see "relation does not exist" errors**: Run the database initialization job
+
+### Database Initialization
+
+If you're getting errors like "relation 'email_accounts' does not exist":
+
+1. Create a new **Job** service in Render
+2. Use the same repository and environment variables
+3. Set **Start Command**: `node scripts/init-production-db.js`
+4. Run the job once to create all database tables
+5. After successful completion, your main web service should work
 
 ### CORS Issues
 
 1. Verify CORS_ORIGIN is set correctly (or left empty to use BASE_URL)
 2. Check that your frontend is being served from the same domain as BASE_URL
+
+### Still Showing Localhost
+
+If OAuth is still redirecting to localhost:
+
+1. Verify BASE_URL environment variable is set correctly in Render
+2. Check that the latest code has been deployed (look for the commit with OAuth fixes)
+3. Restart the web service after adding BASE_URL
 
 ## Environment Variable Template
 
