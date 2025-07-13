@@ -233,8 +233,8 @@ function App() {
   const handleAccountConnected = async (accountData) => {
     try {
       await loadConnectedAccounts();
-      setCurrentStep(2);
-      toast.success(`${accountData.provider} account connected successfully!`);
+      // Don't automatically move to step 2 - let user click Next
+      toast.success(`${accountData.provider} account connected successfully! Click "Next Step" to continue.`);
       
       // Start email processing
       await apiService.startEmailProcessing(accountData.id);
@@ -312,6 +312,11 @@ function App() {
           <StepIndicator steps={STEPS} currentStep={currentStep} />
         </div>
 
+        {/* Debug Info - Remove in production */}
+        <div className="mb-4 p-2 bg-gray-100 rounded text-sm text-gray-600">
+          Current Step: {currentStep} | Connected Accounts: {connectedAccounts.length} | FAQs: {faqs.length}
+        </div>
+
         {/* Main Content */}
         <AnimatePresence mode="wait">
           {currentStep === 1 && (
@@ -371,17 +376,31 @@ function App() {
           <button
             onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
             disabled={currentStep === 1}
-            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
-            Previous Step
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+            </svg>
+            <span>Previous Step</span>
           </button>
           
           <button
-            onClick={() => setCurrentStep(Math.min(3, currentStep + 1))}
+            onClick={() => {
+              const nextStep = Math.min(3, currentStep + 1);
+              console.log('Moving from step', currentStep, 'to step', nextStep);
+              setCurrentStep(nextStep);
+            }}
             disabled={currentStep === 3 || (currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0)}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
-            Next Step
+            <span>
+              {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
+               currentStep === 2 && faqs.length > 0 ? 'View Generated FAQs' :
+               'Next Step'}
+            </span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
           </button>
         </div>
       </main>
