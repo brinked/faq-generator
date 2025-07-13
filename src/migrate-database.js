@@ -13,13 +13,6 @@ const logger = require('./utils/logger');
 const SCHEMA_SQL = `
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
--- Vector extension (may not be available in all environments)
-DO $$ 
-BEGIN
-    CREATE EXTENSION IF NOT EXISTS "vector";
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Vector extension not available - vector columns will be created as TEXT';
-END $$;
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- Create enum types
@@ -264,11 +257,50 @@ async function runMigration() {
     
     logger.info('Database URL configured:', process.env.DATABASE_URL.replace(/:[^:@]*@/, ':***@'));
     
-    // Split the schema into individual statements
-    const statements = SCHEMA_SQL
-      .split(';')
-      .map(stmt => stmt.trim())
-      .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+    // Split the schema into individual statements, handling DO blocks properly
+    const statements = [];
+    let currentStatement = '';
+    let inDoBlock = false;
+    
+    const lines = SCHEMA_SQL.split('\n');
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Skip comments and empty lines
+      if (trimmedLine.startsWith('--') || trimmedLine === '') {
+        continue;
+      }
+      
+      currentStatement += line + '\n';
+      
+      // Check if we're entering a DO block
+      if (trimmedLine.includes('DO $$')) {
+        inDoBlock = true;
+      }
+      
+      // Check if we're ending a DO block
+      if (inDoBlock && trimmedLine.includes('END $$;')) {
+        inDoBlock = false;
+        statements.push(currentStatement.trim());
+        currentStatement = '';
+        continue;
+      }
+      
+      // For non-DO block statements, split on semicolon
+      if (!inDoBlock && trimmedLine.endsWith(';')) {
+        statements.push(currentStatement.trim());
+        currentStatement = '';
+      }
+    }
+    
+    // Add any remaining statement
+    if (currentStatement.trim()) {
+      statements.push(currentStatement.trim());
+    }
+    
+    // Filter out empty statements
+    const validStatements = statements.filter(stmt => stmt.length > 0);
     
     logger.info(`Executing ${statements.length} SQL statements...`);
     
