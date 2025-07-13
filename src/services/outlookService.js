@@ -4,6 +4,10 @@ const logger = require('../utils/logger');
 
 class OutlookService {
   constructor() {
+    // Use BASE_URL to construct redirect URI dynamically
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    this.redirectUri = process.env.OUTLOOK_REDIRECT_URI || `${baseUrl}/api/auth/outlook/callback`;
+    
     this.msalConfig = {
       auth: {
         clientId: process.env.OUTLOOK_CLIENT_ID,
@@ -27,7 +31,7 @@ class OutlookService {
 
     const authCodeUrlParameters = {
       scopes,
-      redirectUri: process.env.OUTLOOK_REDIRECT_URI,
+      redirectUri: this.redirectUri,
       responseMode: 'query'
     };
 
@@ -45,7 +49,7 @@ class OutlookService {
           'https://graph.microsoft.com/Mail.Read',
           'https://graph.microsoft.com/User.Read'
         ],
-        redirectUri: process.env.OUTLOOK_REDIRECT_URI
+        redirectUri: this.redirectUri
       };
 
       const response = await this.cca.acquireTokenByCode(tokenRequest);

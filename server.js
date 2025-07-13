@@ -22,9 +22,14 @@ const { startScheduledJobs } = require('./src/services/schedulerService');
 
 const app = express();
 const server = http.createServer(app);
+
+// Dynamic CORS origin configuration
+const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+const corsOrigin = process.env.CORS_ORIGIN || baseUrl;
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: corsOrigin,
     methods: ["GET", "POST"]
   }
 });
@@ -47,7 +52,7 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: corsOrigin,
   credentials: true
 }));
 

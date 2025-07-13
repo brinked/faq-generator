@@ -4,10 +4,14 @@ const redisClient = require('../config/redis');
 
 class GmailService {
   constructor() {
+    // Use BASE_URL to construct redirect URI dynamically
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const redirectUri = process.env.GMAIL_REDIRECT_URI || `${baseUrl}/api/auth/gmail/callback`;
+    
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GMAIL_CLIENT_ID,
       process.env.GMAIL_CLIENT_SECRET,
-      process.env.GMAIL_REDIRECT_URI
+      redirectUri
     );
     
     this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
