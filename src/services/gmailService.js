@@ -43,8 +43,26 @@ class GmailService {
    */
   async getTokens(code) {
     try {
-      const { tokens } = await this.oauth2Client.getAccessToken(code);
-      return tokens;
+      logger.info('Attempting to exchange authorization code for tokens');
+      const response = await this.oauth2Client.getAccessToken(code);
+      
+      // Log the response structure for debugging
+      logger.info('OAuth response structure:', {
+        hasTokens: !!response?.tokens,
+        responseKeys: Object.keys(response || {}),
+        responseType: typeof response
+      });
+      
+      // Handle different response formats
+      if (response && response.tokens) {
+        return response.tokens;
+      } else if (response && (response.access_token || response.accessToken)) {
+        // Some versions return tokens directly in the response
+        return response;
+      } else {
+        logger.error('Unexpected OAuth response format:', response);
+        throw new Error('Invalid token response format');
+      }
     } catch (error) {
       logger.error('Error getting Gmail tokens:', error);
       throw new Error('Failed to exchange authorization code for tokens');
