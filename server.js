@@ -113,37 +113,57 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// API root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    name: 'FAQ Generator API',
-    version: '1.0.0',
-    status: 'running',
-    endpoints: {
-      health: '/api/health',
-      auth: '/api/auth',
-      accounts: '/api/accounts',
-      emails: '/api/emails',
-      faqs: '/api/faqs',
-      dashboard: '/api/dashboard',
-      export: '/api/export'
-    },
-    documentation: 'https://github.com/brinked/faq-generator'
-  });
-});
-
 // Serve static files in production (if client build exists)
-if (process.env.NODE_ENV === 'production') {
-  const clientBuildPath = path.join(__dirname, 'client/build');
-  const fs = require('fs');
+const clientBuildPath = path.join(__dirname, 'client/build');
+const fs = require('fs');
+
+if (process.env.NODE_ENV === 'production' && fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
   
-  if (fs.existsSync(clientBuildPath)) {
-    app.use(express.static(clientBuildPath));
-    
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(clientBuildPath, 'index.html'));
+  // API root endpoint for production
+  app.get('/api', (req, res) => {
+    res.json({
+      name: 'FAQ Generator API',
+      version: '1.0.0',
+      status: 'running',
+      endpoints: {
+        health: '/api/health',
+        auth: '/api/auth',
+        accounts: '/api/accounts',
+        emails: '/api/emails',
+        faqs: '/api/faqs',
+        dashboard: '/api/dashboard',
+        export: '/api/export'
+      },
+      documentation: 'https://github.com/brinked/faq-generator'
     });
-  }
+  });
+  
+  // Serve React app for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+} else {
+  // Development mode - API root endpoint
+  app.get('/', (req, res) => {
+    res.json({
+      name: 'FAQ Generator API',
+      version: '1.0.0',
+      status: 'running',
+      mode: 'development',
+      endpoints: {
+        health: '/api/health',
+        auth: '/api/auth',
+        accounts: '/api/accounts',
+        emails: '/api/emails',
+        faqs: '/api/faqs',
+        dashboard: '/api/dashboard',
+        export: '/api/export'
+      },
+      frontend: 'Run `npm run dev` in the client directory to start the React development server',
+      documentation: 'https://github.com/brinked/faq-generator'
+    });
+  });
 }
 
 // Error handling middleware

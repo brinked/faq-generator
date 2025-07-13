@@ -29,6 +29,13 @@ An AI-powered FAQ generation system that connects to business email accounts (Gm
 - **Progress Tracking**: Live progress updates for long-running operations
 - **Error Handling**: Comprehensive error tracking and recovery
 
+### 🎨 User Interface
+- **Step-by-Step Wizard**: Intuitive 3-step process for email connection and FAQ generation
+- **Real-time Progress**: Live progress bars and status updates during processing
+- **Beautiful Design**: Modern, responsive interface with smooth animations
+- **Email Integration**: One-click OAuth authentication for Gmail and Outlook
+- **FAQ Management**: Search, filter, edit, and export generated FAQs
+
 ### 📈 Analytics & Monitoring
 - **Dashboard**: Comprehensive overview of system statistics
 - **Processing Metrics**: Track email processing and FAQ generation
@@ -36,6 +43,13 @@ An AI-powered FAQ generation system that connects to business email accounts (Gm
 - **Export Capabilities**: Export FAQs in JSON and CSV formats
 
 ## Technology Stack
+
+### Frontend
+- **React 18** with modern hooks and functional components
+- **Tailwind CSS** for responsive, utility-first styling
+- **Framer Motion** for smooth animations and transitions
+- **Socket.IO Client** for real-time updates and notifications
+- **React Toastify** for user-friendly notifications
 
 ### Backend
 - **Node.js** with Express.js framework
@@ -96,9 +110,29 @@ npm run migrate
 ```
 
 5. **Start the development server**
+
+For backend only:
 ```bash
 npm run dev
 ```
+
+For full-stack development (backend + frontend):
+```bash
+npm run dev:full
+```
+
+Or start them separately:
+```bash
+# Terminal 1: Backend
+npm run dev
+
+# Terminal 2: Frontend
+npm run dev:client
+```
+
+The application will be available at:
+- **Frontend**: http://localhost:3001 (React development server)
+- **Backend API**: http://localhost:3000 (Express server)
 
 The application will be available at `http://localhost:3000`
 

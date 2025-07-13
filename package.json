@@ -5,8 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "echo 'No build step required for Node.js app'",
+    "build": "npm run build:client",
+    "build:client": "cd client && npm install && npm run build",
+    "build:client:dev": "cd client && npm install && node build.js",
+    "deploy": "node deploy.js",
     "dev": "nodemon server.js",
+    "dev:client": "cd client && npm start",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:client\"",
+    "install:client": "cd client && npm install",
     "test": "mocha tests/**/*.test.js --timeout 10000 --recursive",
     "test:watch": "mocha tests/**/*.test.js --timeout 10000 --recursive --watch",
     "test:coverage": "nyc mocha tests/**/*.test.js --timeout 10000 --recursive",
@@ -16,7 +22,8 @@
     "generate-faqs": "node scripts/generate-faqs.js",
     "cleanup": "node scripts/cleanup.js",
     "lint": "eslint src/ tests/ --ext .js",
-    "lint:fix": "eslint src/ tests/ --ext .js --fix"
+    "lint:fix": "eslint src/ tests/ --ext .js --fix",
+    "postinstall": "npm run install:client"
   },
   "keywords": [
     "faq",
@@ -58,6 +65,7 @@
   },
   "devDependencies": {
     "nodemon": "^2.0.22",
+    "concurrently": "^8.0.1",
     "mocha": "^10.2.0",
     "chai": "^4.3.7",
     "sinon": "^15.0.4",

@@ -1,275 +1,375 @@
-# FAQ Generator - Render.com Deployment Guide
+# FAQ Generator - Complete Deployment Guide
 
-This guide will walk you through deploying the FAQ Generator application to Render.com.
+This guide covers deploying the full-stack FAQ Generator application with both backend API and frontend interface to Render.com.
+
+## Overview
+
+The application consists of:
+- **Backend**: Node.js/Express API with PostgreSQL and Redis
+- **Frontend**: React SPA served by the backend in production
+- **Services**: Background workers for email processing
 
 ## Prerequisites
 
-1. **GitHub Account**: Your code needs to be in a GitHub repository
-2. **Render.com Account**: Sign up at [render.com](https://render.com)
-3. **API Keys**: You'll need API keys for:
-   - OpenAI API
-   - Gmail API (Google Cloud Console)
-   - Outlook API (Microsoft Azure)
+- Render.com account
+- Gmail API credentials (Google Cloud Console)
+- Outlook API credentials (Azure Portal)
+- OpenAI API key
 
-## Step 1: Prepare Your Repository
+## Deployment Architecture
 
-### 1.1 Initialize Git Repository
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Service   │    │   PostgreSQL    │    │     Redis       │
+│  (Backend API   │◄──►│   Database      │    │    Cache        │
+│  + Frontend)    │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         ▲
+         │
+┌─────────────────┐
+│ Background      │
+│ Worker Service  │
+│ (Email Proc.)   │
+└─────────────────┘
+```
 
+## Step 1: Prepare the Application
+
+### 1.1 Build Frontend
 ```bash
-cd faq-generator
-git init
-git add .
-git commit -m "Initial commit: FAQ Generator application"
+# From project root
+cd client
+npm install
+npm run build
+cd ..
 ```
 
-### 1.2 Create GitHub Repository
+### 1.2 Verify Build Structure
+```
+faq-generator/
+├── client/build/          # React production build
+├── src/                   # Backend source
+├── server.js             # Main server file
+└── package.json          # Backend dependencies
+```
 
-1. Go to [GitHub](https://github.com) and create a new repository
-2. Name it `faq-generator` (or your preferred name)
-3. Don't initialize with README (we already have one)
-4. Copy the repository URL
+## Step 2: Deploy to Render.com
 
-### 1.3 Push to GitHub
+### 2.1 Create PostgreSQL Database
 
+1. Go to Render Dashboard → New → PostgreSQL
+2. Configure:
+   - **Name**: `faq-generator-db`
+   - **Database**: `faq_generator`
+   - **User**: `faq_user`
+   - **Region**: Choose closest to your users
+   - **Plan**: Starter ($7/month) or higher
+
+3. Save the connection details:
+   - **Internal Database URL**: `postgresql://faq_user:password@hostname:5432/faq_generator`
+   - **External Database URL**: For external connections
+
+### 2.2 Create Redis Instance
+
+1. Go to Render Dashboard → New → Redis
+2. Configure:
+   - **Name**: `faq-generator-redis`
+   - **Plan**: Starter ($7/month) or higher
+   - **Region**: Same as database
+
+3. Save the Redis URL: `redis://hostname:port`
+
+### 2.3 Deploy Web Service (Backend + Frontend)
+
+1. Go to Render Dashboard → New → Web Service
+2. Connect your GitHub repository
+3. Configure:
+
+**Basic Settings:**
+- **Name**: `faq-generator-web`
+- **Environment**: `Node`
+- **Region**: Same as database/Redis
+- **Branch**: `main`
+- **Root Directory**: Leave empty
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm start`
+
+**Environment Variables:**
+```env
+NODE_ENV=production
+PORT=10000
+
+# Database
+DATABASE_URL=<your-postgresql-internal-url>
+
+# Redis
+REDIS_URL=<your-redis-url>
+
+# OpenAI
+OPENAI_API_KEY=<your-openai-api-key>
+
+# Gmail OAuth
+GMAIL_CLIENT_ID=286842204728-e90v2166rv1lsq9b924n6e5kdmus9mb4.apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=<your-gmail-client-secret>
+GMAIL_REDIRECT_URI=https://your-app-name.onrender.com/api/auth/gmail/callback
+
+# Outlook OAuth
+OUTLOOK_CLIENT_ID=928bc572-d6a0-4711-9b15-9c8e88ab5f78
+OUTLOOK_CLIENT_SECRET=<your-outlook-client-secret>
+OUTLOOK_REDIRECT_URI=https://your-app-name.onrender.com/api/auth/outlook/callback
+
+# Security
+JWT_SECRET=<generate-random-32-char-string>
+ENCRYPTION_KEY=<generate-random-32-char-string>
+
+# CORS
+CORS_ORIGIN=https://your-app-name.onrender.com
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Logging
+LOG_LEVEL=info
+```
+
+### 2.4 Deploy Background Worker Service
+
+1. Go to Render Dashboard → New → Background Worker
+2. Connect same repository
+3. Configure:
+
+**Basic Settings:**
+- **Name**: `faq-generator-worker`
+- **Environment**: `Node`
+- **Region**: Same as other services
+- **Branch**: `main`
+- **Build Command**: `npm install`
+- **Start Command**: `node src/workers/emailProcessor.js`
+
+**Environment Variables:** (Same as web service)
+
+### 2.5 Deploy Cron Job (Optional)
+
+1. Go to Render Dashboard → New → Cron Job
+2. Configure:
+   - **Name**: `faq-generator-sync`
+   - **Command**: `node scripts/cron-email-sync.js`
+   - **Schedule**: `0 */6 * * *` (every 6 hours)
+   - **Environment Variables**: Same as web service
+
+## Step 3: Configure OAuth Applications
+
+### 3.1 Update Gmail OAuth Settings
+
+1. Go to Google Cloud Console → APIs & Services → Credentials
+2. Edit your OAuth 2.0 Client ID
+3. Add to **Authorized redirect URIs**:
+   ```
+   https://your-app-name.onrender.com/api/auth/gmail/callback
+   ```
+
+### 3.2 Update Outlook OAuth Settings
+
+1. Go to Azure Portal → App registrations
+2. Select your application
+3. Go to Authentication → Add platform → Web
+4. Add redirect URI:
+   ```
+   https://your-app-name.onrender.com/api/auth/outlook/callback
+   ```
+
+## Step 4: Database Setup
+
+### 4.1 Run Migrations
+
+After deployment, run database migrations:
+
+1. Go to your web service shell (Render Dashboard → Service → Shell)
+2. Run:
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/faq-generator.git
-git branch -M main
-git push -u origin main
+npm run migrate
 ```
 
-## Step 2: Set Up API Credentials
+### 4.2 Verify Database Schema
 
-### 2.1 OpenAI API Key
-
-1. Go to [OpenAI API](https://platform.openai.com/api-keys)
-2. Create a new API key
-3. Save it securely (you'll need it for Render environment variables)
-
-### 2.2 Gmail API Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable the Gmail API
-4. Create OAuth 2.0 credentials:
-   - Application type: Web application
-   - Authorized redirect URIs: `https://YOUR_APP_NAME.onrender.com/api/auth/gmail/callback`
-5. Save the Client ID and Client Secret
-
-### 2.3 Outlook API Setup
-
-1. Go to [Azure Portal](https://portal.azure.com/)
-2. Navigate to Azure Active Directory > App registrations
-3. Create a new registration:
-   - Name: FAQ Generator
-   - Redirect URI: `https://YOUR_APP_NAME.onrender.com/api/auth/outlook/callback`
-4. Note the Application (client) ID and Directory (tenant) ID
-5. Create a client secret in "Certificates & secrets"
-
-## Step 3: Deploy to Render.com
-
-### 3.1 Connect Repository
-
-1. Log in to [Render.com](https://render.com)
-2. Click "New +" and select "Blueprint"
-3. Connect your GitHub account
-4. Select your `faq-generator` repository
-5. Render will detect the `render.yaml` file
-
-### 3.2 Configure Environment Variables
-
-The blueprint will create all services, but you need to set these environment variables:
-
-#### For Web Service (`faq-generator-web`):
-
-**Required API Keys:**
-```
-OPENAI_API_KEY=your_openai_api_key_here
-GMAIL_CLIENT_ID=your_gmail_client_id_here
-GMAIL_CLIENT_SECRET=your_gmail_client_secret_here
-OUTLOOK_CLIENT_ID=your_outlook_client_id_here
-OUTLOOK_CLIENT_SECRET=your_outlook_client_secret_here
+Check that all tables are created:
+```sql
+\dt  -- List tables
 ```
 
-**Update Redirect URIs:**
+Expected tables:
+- `email_accounts`
+- `emails`
+- `questions`
+- `faqs`
+- `processing_jobs`
+
+## Step 5: Verify Deployment
+
+### 5.1 Health Check
+
+Visit: `https://your-app-name.onrender.com/api/health`
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-13T...",
+  "services": {
+    "database": "connected",
+    "redis": "connected"
+  }
+}
 ```
-GMAIL_REDIRECT_URI=https://YOUR_APP_NAME.onrender.com/api/auth/gmail/callback
-OUTLOOK_REDIRECT_URI=https://YOUR_APP_NAME.onrender.com/api/auth/outlook/callback
-CORS_ORIGIN=https://YOUR_APP_NAME.onrender.com
-```
 
-**Optional Configuration:**
-```
-ALERT_WEBHOOK_URL=your_slack_or_discord_webhook_url (optional)
-```
+### 5.2 Frontend Access
 
-#### For Worker Service (`faq-generator-worker`):
-- Same API keys as web service
-- Database and Redis URLs are auto-configured
+Visit: `https://your-app-name.onrender.com`
 
-#### For Cron Jobs:
-- Same API keys as web service
-- Database and Redis URLs are auto-configured
+You should see the React frontend with:
+- FAQ Generator header
+- Step-by-step wizard
+- Email connection options
 
-### 3.3 Deploy Services
+### 5.3 API Endpoints
 
-1. Click "Apply" to deploy all services
-2. Render will:
-   - Create PostgreSQL database
-   - Create Redis instance
-   - Deploy web service
-   - Deploy worker service
-   - Set up cron jobs
+Test key endpoints:
+- `GET /api/accounts` - Should return empty array initially
+- `GET /api/faqs` - Should return empty array initially
+- `GET /api/auth/gmail` - Should redirect to Google OAuth
 
-### 3.4 Monitor Deployment
+## Step 6: Monitoring and Maintenance
 
-1. Watch the build logs for each service
-2. Ensure all services start successfully
-3. Check the web service health at: `https://YOUR_APP_NAME.onrender.com/api/health`
+### 6.1 Logs
 
-## Step 4: Post-Deployment Setup
+Monitor logs in Render Dashboard:
+- **Web Service**: Application logs, HTTP requests
+- **Worker Service**: Background job processing
+- **Database**: Connection and query logs
 
-### 4.1 Database Migration
+### 6.2 Metrics
 
-The database will be automatically migrated on first deployment via the `render.yaml` configuration.
+Monitor in Render Dashboard:
+- **CPU Usage**: Should be < 80% normally
+- **Memory Usage**: Should be < 80% of allocated
+- **Response Times**: Should be < 2s for most requests
 
-### 4.2 Test Email Integration
+### 6.3 Scaling
 
-1. Go to your deployed application
-2. Try connecting a Gmail or Outlook account
-3. Verify the OAuth flow works correctly
-4. Check that emails are being synchronized
+For higher traffic:
+1. Upgrade service plans
+2. Add more worker instances
+3. Consider database connection pooling
+4. Implement caching strategies
 
-### 4.3 Monitor Cron Jobs
-
-1. In Render dashboard, check the cron job logs
-2. Verify they're running on schedule:
-   - Email sync: Every 30 minutes
-   - FAQ generation: Every 2 hours
-   - Cleanup: Daily at 2 AM
-
-## Step 5: Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-#### 1. OAuth Redirect URI Mismatch
-**Error**: `redirect_uri_mismatch`
-**Solution**: Update redirect URIs in Google/Microsoft consoles to match your Render URL
-
-#### 2. Database Connection Issues
-**Error**: Database connection failed
-**Solution**: Check that PostgreSQL service is running and environment variables are set
-
-#### 3. Redis Connection Issues
-**Error**: Redis connection failed
-**Solution**: Verify Redis service is running and accessible
-
-#### 4. OpenAI API Issues
-**Error**: OpenAI API calls failing
-**Solution**: 
-- Check API key is valid
-- Verify you have sufficient credits
-- Check rate limits
-
-#### 5. Cron Jobs Not Running
-**Error**: Scheduled tasks not executing
-**Solution**:
-- Check cron job logs in Render dashboard
-- Verify environment variables are set for cron services
-- Check script permissions
-
-### Debugging Steps
-
-1. **Check Service Logs**:
-   - Go to Render dashboard
-   - Select each service
-   - Review logs for errors
-
-2. **Test API Endpoints**:
+1. **Build Failures**
    ```bash
-   curl https://YOUR_APP_NAME.onrender.com/api/health
-   curl https://YOUR_APP_NAME.onrender.com/api/dashboard/stats
+   # Check build logs
+   # Ensure all dependencies are in package.json
+   # Verify Node.js version compatibility
    ```
 
-3. **Database Access**:
-   - Use Render's database shell
-   - Check table creation and data
+2. **Database Connection Issues**
+   ```bash
+   # Verify DATABASE_URL format
+   # Check database service status
+   # Run migration manually
+   ```
 
-4. **Redis Access**:
-   - Use Redis CLI through Render
-   - Check queue status
+3. **Redis Connection Issues**
+   ```bash
+   # Verify REDIS_URL format
+   # Check Redis service status
+   # Test connection in shell
+   ```
 
-## Step 6: Scaling and Optimization
+4. **OAuth Errors**
+   ```bash
+   # Verify redirect URIs match exactly
+   # Check client IDs and secrets
+   # Ensure HTTPS in production
+   ```
 
-### 6.1 Upgrade Plans
+5. **Frontend Not Loading**
+   ```bash
+   # Check if client/build directory exists
+   # Verify NODE_ENV=production
+   # Check static file serving in server.js
+   ```
 
-For production use, consider upgrading:
-- **Web Service**: Standard plan for better performance
-- **Database**: Standard plan for more storage and connections
-- **Redis**: Standard plan for more memory
+### Debug Commands
 
-### 6.2 Performance Monitoring
+```bash
+# Check environment variables
+env | grep -E "(DATABASE|REDIS|OPENAI)"
 
-Monitor these metrics:
-- Response times
-- Database query performance
-- Queue processing times
-- Memory usage
-- Error rates
+# Test database connection
+node -e "const db = require('./src/config/database'); db.query('SELECT 1').then(console.log).catch(console.error);"
 
-### 6.3 Backup Strategy
+# Test Redis connection
+node -e "const redis = require('./src/config/redis'); redis.ping().then(console.log).catch(console.error);"
 
-1. **Database Backups**: Render provides automatic backups
-2. **Data Export**: Use the built-in export functionality
-3. **Code Backups**: Keep your Git repository updated
-
-## Step 7: Maintenance
-
-### Regular Tasks
-
-1. **Monitor Logs**: Check for errors regularly
-2. **Update Dependencies**: Keep packages updated
-3. **API Key Rotation**: Rotate API keys periodically
-4. **Database Cleanup**: Monitor storage usage
-5. **Performance Review**: Check metrics monthly
-
-### Updates and Deployments
-
-1. Make changes to your local repository
-2. Commit and push to GitHub
-3. Render will automatically redeploy
-4. Monitor deployment logs
+# Check build directory
+ls -la client/build/
+```
 
 ## Security Considerations
 
-1. **Environment Variables**: Never commit API keys to Git
-2. **HTTPS Only**: Ensure all traffic uses HTTPS
-3. **Rate Limiting**: Monitor API usage
-4. **Access Logs**: Review access patterns
-5. **Regular Updates**: Keep dependencies updated
+1. **Environment Variables**: Never commit secrets to repository
+2. **HTTPS**: Always use HTTPS in production
+3. **CORS**: Configure CORS_ORIGIN properly
+4. **Rate Limiting**: Monitor and adjust rate limits
+5. **Database**: Use connection pooling and prepared statements
+6. **OAuth**: Validate redirect URIs and state parameters
 
-## Support and Resources
+## Performance Optimization
 
-- **Render Documentation**: [render.com/docs](https://render.com/docs)
-- **Application Logs**: Available in Render dashboard
-- **Health Check**: `https://YOUR_APP_NAME.onrender.com/api/health`
-- **System Status**: `https://YOUR_APP_NAME.onrender.com/api/dashboard/health`
+1. **Frontend**: Enable gzip compression, optimize images
+2. **Backend**: Use Redis caching, optimize database queries
+3. **Database**: Add indexes, use connection pooling
+4. **Workers**: Scale based on email volume
+5. **CDN**: Consider CDN for static assets
 
-## Cost Estimation
+## Backup and Recovery
 
-**Starter Plan (Development)**:
-- Web Service: $7/month
-- Worker Service: $7/month
-- PostgreSQL: $7/month
-- Redis: $7/month
-- Cron Jobs: $7/month each (3 jobs = $21/month)
-- **Total**: ~$49/month
+1. **Database**: Render provides automated backups
+2. **Redis**: Consider persistence settings
+3. **Code**: Use Git for version control
+4. **Environment**: Document all environment variables
 
-**Standard Plan (Production)**:
-- Web Service: $25/month
-- Worker Service: $25/month
-- PostgreSQL: $20/month
-- Redis: $20/month
-- Cron Jobs: $25/month each (3 jobs = $75/month)
-- **Total**: ~$165/month
+## Cost Optimization
 
-Remember to replace `YOUR_APP_NAME` with your actual Render service name throughout this guide.
+**Starter Setup (~$21/month):**
+- Web Service: Starter ($7)
+- PostgreSQL: Starter ($7)
+- Redis: Starter ($7)
+
+**Production Setup (~$75/month):**
+- Web Service: Standard ($25)
+- PostgreSQL: Standard ($20)
+- Redis: Standard ($15)
+- Worker Service: Standard ($15)
+
+## Support
+
+For issues:
+1. Check Render documentation
+2. Review application logs
+3. Test locally first
+4. Contact Render support for platform issues
+
+---
+
+**Deployment Complete!** 🎉
+
+Your FAQ Generator application is now live with:
+- ✅ Beautiful React frontend
+- ✅ Full-featured backend API
+- ✅ Real-time processing
+- ✅ Email integration
+- ✅ Production-ready infrastructure
