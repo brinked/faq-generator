@@ -214,5 +214,5 @@ databases:
   - name: faq-generator-db
     databaseName: faq_generator
     user: faq_user
-    plan: starter
+    plan: free
     postgresMajorVersion: 15
