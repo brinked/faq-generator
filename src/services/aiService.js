@@ -1,12 +1,13 @@
-const OpenAI = require('openai');
+const { Configuration, OpenAIApi } = require('openai');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
 class AIService {
   constructor() {
-    this.openai = new OpenAI({
+    const configuration = new Configuration({
       apiKey: process.env.OPENAI_API_KEY
     });
+    this.openai = new OpenAIApi(configuration);
     
     this.embeddingModel = process.env.OPENAI_MODEL || 'text-embedding-3-small';
     this.chatModel = 'gpt-4o-mini';
@@ -79,7 +80,7 @@ Respond in JSON format:
 }
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -95,7 +96,7 @@ Respond in JSON format:
         max_tokens: 1000
       });
 
-      const result = JSON.parse(response.choices[0].message.content);
+      const result = JSON.parse(response.data.choices[0].message.content);
       
       // Filter questions based on confidence and length
       const minConfidence = parseFloat(process.env.QUESTION_CONFIDENCE_THRESHOLD) || 0.7;
@@ -165,13 +166,12 @@ Respond in JSON format:
         return JSON.parse(cached);
       }
 
-      const response = await this.openai.embeddings.create({
+      const response = await this.openai.createEmbedding({
         model: this.embeddingModel,
-        input: text,
-        encoding_format: 'float'
+        input: text
       });
 
-      const embedding = response.data[0].embedding;
+      const embedding = response.data.data[0].embedding;
       
       // Cache the embedding for 24 hours
       await redisClient.set(cacheKey, JSON.stringify(embedding), { ttl: 86400 });
@@ -195,13 +195,12 @@ Respond in JSON format:
       for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
         
-        const response = await this.openai.embeddings.create({
+        const response = await this.openai.createEmbedding({
           model: this.embeddingModel,
-          input: batch,
-          encoding_format: 'float'
+          input: batch
         });
 
-        embeddings.push(...response.data.map(item => item.embedding));
+        embeddings.push(...response.data.data.map(item => item.embedding));
       }
 
       return embeddings;
