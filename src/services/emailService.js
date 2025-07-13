@@ -54,8 +54,13 @@ class EmailService {
         token_expires_at
       ]);
 
-      logger.info(`Email account ${email_address} created/updated successfully`);
-      return result.rows[0];
+      const account = result.rows[0];
+      logger.info(`Email account ${email_address} created/updated successfully`, {
+        accountId: account.id,
+        provider: provider,
+        status: account.status
+      });
+      return account;
 
     } catch (error) {
       logger.error('Error creating/updating email account:', error);

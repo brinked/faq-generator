@@ -163,6 +163,15 @@ router.get('/outlook/callback', async (req, res) => {
   try {
     const { code, error } = req.query;
     
+    logger.info('Outlook OAuth callback received', {
+      hasCode: !!code,
+      hasError: !!error,
+      error: error,
+      query: req.query,
+      headers: req.headers,
+      url: req.url
+    });
+    
     if (error) {
       logger.error('Outlook OAuth error:', error);
       return res.redirect(`${corsOrigin}/?error=oauth_denied`);
