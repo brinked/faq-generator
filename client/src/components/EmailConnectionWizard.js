@@ -12,6 +12,8 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
     setConnecting(provider);
     
     try {
+      console.log(`Starting OAuth flow for ${provider}`);
+      
       let authUrl;
       if (provider === 'gmail') {
         authUrl = await apiService.getGmailAuthUrl();
@@ -19,12 +21,16 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
         authUrl = await apiService.getOutlookAuthUrl();
       }
 
+      console.log(`OAuth URL received:`, authUrl);
+
       // Open OAuth popup
       const popup = window.open(
         authUrl,
         'oauth',
         'width=500,height=600,scrollbars=yes,resizable=yes'
       );
+      
+      console.log(`OAuth popup opened:`, popup ? 'success' : 'failed');
 
       // Listen for OAuth callback
       const checkClosed = setInterval(() => {
@@ -53,9 +59,15 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
 
       // Handle OAuth message from popup
       const handleMessage = (event) => {
-        if (event.origin !== window.location.origin) return;
+        console.log('Received message:', event.data, 'from origin:', event.origin);
+        
+        if (event.origin !== window.location.origin) {
+          console.log('Ignoring message from different origin');
+          return;
+        }
         
         if (event.data.type === 'OAUTH_SUCCESS') {
+          console.log('OAuth success message received');
           if (popup && !popup.closed) {
             popup.close();
           }
@@ -87,6 +99,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
             }
           }, 500);
         } else if (event.data.type === 'OAUTH_ERROR') {
+          console.log('OAuth error message received:', event.data);
           if (popup && !popup.closed) {
             popup.close();
           }

@@ -59,6 +59,20 @@ class ApiService {
   async connectOutlookAccount() {
     return this.request('/api/auth/outlook');
   }
+  
+  async getGmailAuthUrl() {
+    console.log('Requesting Gmail auth URL');
+    const response = await this.request('/api/auth/gmail/url');
+    console.log('Gmail auth URL response:', response);
+    return response.authUrl;
+  }
+
+  async getOutlookAuthUrl() {
+    console.log('Requesting Outlook auth URL');
+    const response = await this.request('/api/auth/outlook/url');
+    console.log('Outlook auth URL response:', response);
+    return response.authUrl;
+  }
 
   async handleGmailCallback(code) {
     return this.request('/api/auth/gmail/callback', {
