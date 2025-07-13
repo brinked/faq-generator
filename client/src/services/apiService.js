@@ -1,4 +1,20 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// Determine the API base URL based on environment
+const getApiBaseUrl = () => {
+  // If REACT_APP_API_URL is explicitly set, use it
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // In production, use the same domain as the frontend
+  if (process.env.NODE_ENV === 'production') {
+    return window.location.origin;
+  }
+  
+  // In development, use localhost
+  return 'http://localhost:3000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiService {
   constructor() {

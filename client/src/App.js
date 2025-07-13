@@ -33,8 +33,28 @@ function App() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Initialize socket connection
-        const socketConnection = io(process.env.REACT_APP_API_URL || 'http://localhost:3000');
+        // Initialize socket connection with proper URL detection
+        const getSocketUrl = () => {
+          // If REACT_APP_SOCKET_URL is explicitly set, use it
+          if (process.env.REACT_APP_SOCKET_URL) {
+            return process.env.REACT_APP_SOCKET_URL;
+          }
+          
+          // If REACT_APP_API_URL is set, use it for socket too
+          if (process.env.REACT_APP_API_URL) {
+            return process.env.REACT_APP_API_URL;
+          }
+          
+          // In production, use the same domain as the frontend
+          if (process.env.NODE_ENV === 'production') {
+            return window.location.origin;
+          }
+          
+          // In development, use localhost
+          return 'http://localhost:3000';
+        };
+        
+        const socketConnection = io(getSocketUrl());
         setSocket(socketConnection);
 
         // Set up socket event listeners
