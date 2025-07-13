@@ -33,7 +33,7 @@ function encrypt(text) {
   try {
     const key = getEncryptionKey();
     const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipher(ALGORITHM, key);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     cipher.setAAD(Buffer.from('faq-generator', 'utf8'));
     
     let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -69,7 +69,7 @@ function decrypt(encryptedData) {
     const iv = Buffer.from(ivHex, 'hex');
     const tag = Buffer.from(tagHex, 'hex');
     
-    const decipher = crypto.createDecipher(ALGORITHM, key);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAAD(Buffer.from('faq-generator', 'utf8'));
     decipher.setAuthTag(tag);
     
