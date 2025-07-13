@@ -27,6 +27,11 @@ const server = http.createServer(app);
 const baseUrl = process.env.BASE_URL || "http://localhost:3000";
 const corsOrigin = process.env.CORS_ORIGIN || baseUrl;
 
+// Log warning if BASE_URL is not set in production
+if (process.env.NODE_ENV === 'production' && !process.env.BASE_URL) {
+  console.warn('WARNING: BASE_URL environment variable not set in production. OAuth redirects may fail.');
+}
+
 const io = socketIo(server, {
   cors: {
     origin: corsOrigin,

@@ -10,7 +10,10 @@ const gmailService = new GmailService();
 const outlookService = new OutlookService();
 
 // Dynamic CORS origin configuration
-const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.BASE_URL;
+if (!baseUrl) {
+  throw new Error('BASE_URL environment variable is required for OAuth redirects');
+}
 const corsOrigin = process.env.CORS_ORIGIN || baseUrl;
 
 /**

@@ -5,7 +5,11 @@ const logger = require('../utils/logger');
 class OutlookService {
   constructor() {
     // Use BASE_URL to construct redirect URI dynamically
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    // For production, BASE_URL should be set to your render.com URL
+    const baseUrl = process.env.BASE_URL;
+    if (!baseUrl) {
+      throw new Error('BASE_URL environment variable is required for Outlook OAuth configuration');
+    }
     this.redirectUri = process.env.OUTLOOK_REDIRECT_URI || `${baseUrl}/api/auth/outlook/callback`;
     
     this.msalConfig = {

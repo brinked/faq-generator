@@ -5,7 +5,11 @@ const redisClient = require('../config/redis');
 class GmailService {
   constructor() {
     // Use BASE_URL to construct redirect URI dynamically
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    // For production, BASE_URL should be set to your render.com URL
+    const baseUrl = process.env.BASE_URL;
+    if (!baseUrl) {
+      throw new Error('BASE_URL environment variable is required for Gmail OAuth configuration');
+    }
     const redirectUri = process.env.GMAIL_REDIRECT_URI || `${baseUrl}/api/auth/gmail/callback`;
     
     this.oauth2Client = new google.auth.OAuth2(

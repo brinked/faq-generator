@@ -26,10 +26,6 @@ CREATE TABLE email_accounts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_email_accounts_provider (provider),
-    INDEX idx_email_accounts_status (status),
-    INDEX idx_email_accounts_last_sync (last_sync_at)
 );
 
 -- Emails table
@@ -57,17 +53,6 @@ CREATE TABLE emails (
     -- Unique constraint on account + message_id
     UNIQUE(account_id, message_id),
     
-    -- Indexes
-    INDEX idx_emails_account_id (account_id),
-    INDEX idx_emails_thread_id (thread_id),
-    INDEX idx_emails_received_at (received_at),
-    INDEX idx_emails_processing_status (processing_status),
-    INDEX idx_emails_is_processed (is_processed),
-    INDEX idx_emails_sender_email (sender_email),
-    
-    -- Full-text search indexes
-    INDEX idx_emails_subject_gin (to_tsvector('english', subject)),
-    INDEX idx_emails_body_gin (to_tsvector('english', body_text))
 );
 
 -- Questions extracted from emails
@@ -86,14 +71,6 @@ CREATE TABLE questions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_questions_email_id (email_id),
-    INDEX idx_questions_confidence (confidence_score),
-    INDEX idx_questions_is_customer (is_customer_question),
-    INDEX idx_questions_embedding_cosine (embedding vector_cosine_ops),
-    
-    -- Full-text search index
-    INDEX idx_questions_text_gin (to_tsvector('english', question_text))
 );
 
 -- FAQ groups (clusters of similar questions)
@@ -112,14 +89,6 @@ CREATE TABLE faq_groups (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_faq_groups_frequency (frequency_score DESC),
-    INDEX idx_faq_groups_published (is_published),
-    INDEX idx_faq_groups_category (category),
-    INDEX idx_faq_groups_embedding_cosine (representative_embedding vector_cosine_ops),
-    
-    -- Full-text search index
-    INDEX idx_faq_groups_search_gin (to_tsvector('english', title || ' ' || representative_question || ' ' || consolidated_answer))
 );
 
 -- Junction table for questions and FAQ groups
@@ -132,10 +101,6 @@ CREATE TABLE question_groups (
     
     PRIMARY KEY (question_id, group_id),
     
-    -- Indexes
-    INDEX idx_question_groups_group_id (group_id),
-    INDEX idx_question_groups_similarity (similarity_score DESC),
-    INDEX idx_question_groups_representative (is_representative)
 );
 
 -- Processing jobs table for background tasks
@@ -154,11 +119,6 @@ CREATE TABLE processing_jobs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_processing_jobs_status (status),
-    INDEX idx_processing_jobs_type (job_type),
-    INDEX idx_processing_jobs_account (account_id),
-    INDEX idx_processing_jobs_created (created_at DESC)
 );
 
 -- System settings table
@@ -180,9 +140,6 @@ CREATE TABLE audit_logs (
     user_id VARCHAR(100), -- For future user management
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_audit_logs_table_record (table_name, record_id),
-    INDEX idx_audit_logs_created (created_at DESC)
 );
 
 -- System metrics table for tracking scheduled job performance
@@ -193,9 +150,6 @@ CREATE TABLE system_metrics (
     metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Indexes
-    INDEX idx_system_metrics_name (metric_name),
-    INDEX idx_system_metrics_created (created_at DESC)
 );
 
 -- Create functions for updated_at timestamps
@@ -281,3 +235,58 @@ INSERT INTO system_settings (key, value, description) VALUES
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_emails_full_text ON emails USING gin(to_tsvector('english', COALESCE(subject, '') || ' ' || COALESCE(body_text, '')));
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_questions_embedding_hnsw ON questions USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_faq_groups_embedding_hnsw ON faq_groups USING hnsw (representative_embedding vector_cosine_ops);
+
+-- Create indexes separately after table creation
+-- Email accounts indexes
+CREATE INDEX IF NOT EXISTS idx_email_accounts_provider ON email_accounts(provider);
+CREATE INDEX IF NOT EXISTS idx_email_accounts_status ON email_accounts(status);
+CREATE INDEX IF NOT EXISTS idx_email_accounts_created ON email_accounts(created_at DESC);
+
+-- Emails indexes
+CREATE INDEX IF NOT EXISTS idx_emails_account_id ON emails(account_id);
+CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id);
+CREATE INDEX IF NOT EXISTS idx_emails_received_at ON emails(received_at);
+CREATE INDEX IF NOT EXISTS idx_emails_processing_status ON emails(processing_status);
+CREATE INDEX IF NOT EXISTS idx_emails_is_processed ON emails(is_processed);
+CREATE INDEX IF NOT EXISTS idx_emails_sender_email ON emails(sender_email);
+
+-- Full-text search indexes for emails
+CREATE INDEX IF NOT EXISTS idx_emails_subject_gin ON emails USING gin(to_tsvector('english', subject));
+CREATE INDEX IF NOT EXISTS idx_emails_body_gin ON emails USING gin(to_tsvector('english', body_text));
+
+-- Questions indexes
+CREATE INDEX IF NOT EXISTS idx_questions_email_id ON questions(email_id);
+CREATE INDEX IF NOT EXISTS idx_questions_confidence ON questions(confidence_score);
+CREATE INDEX IF NOT EXISTS idx_questions_is_customer ON questions(is_customer_question);
+CREATE INDEX IF NOT EXISTS idx_questions_embedding_cosine ON questions USING ivfflat (embedding vector_cosine_ops);
+
+-- Full-text search index for questions
+CREATE INDEX IF NOT EXISTS idx_questions_text_gin ON questions USING gin(to_tsvector('english', question_text));
+
+-- FAQ groups indexes
+CREATE INDEX IF NOT EXISTS idx_faq_groups_frequency ON faq_groups(frequency_score DESC);
+CREATE INDEX IF NOT EXISTS idx_faq_groups_published ON faq_groups(is_published);
+CREATE INDEX IF NOT EXISTS idx_faq_groups_category ON faq_groups(category);
+CREATE INDEX IF NOT EXISTS idx_faq_groups_embedding_cosine ON faq_groups USING ivfflat (representative_embedding vector_cosine_ops);
+
+-- Full-text search index for FAQ groups
+CREATE INDEX IF NOT EXISTS idx_faq_groups_search_gin ON faq_groups USING gin(to_tsvector('english', title || ' ' || representative_question || ' ' || consolidated_answer));
+
+-- Question groups indexes
+CREATE INDEX IF NOT EXISTS idx_question_groups_group_id ON question_groups(group_id);
+CREATE INDEX IF NOT EXISTS idx_question_groups_similarity ON question_groups(similarity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_question_groups_representative ON question_groups(is_representative);
+
+-- Processing jobs indexes
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_status ON processing_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_type ON processing_jobs(job_type);
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_account ON processing_jobs(account_id);
+CREATE INDEX IF NOT EXISTS idx_processing_jobs_created ON processing_jobs(created_at DESC);
+
+-- Audit logs indexes
+CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record ON audit_logs(table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+
+-- System metrics indexes
+CREATE INDEX IF NOT EXISTS idx_system_metrics_name ON system_metrics(metric_name);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_created ON system_metrics(created_at DESC);
