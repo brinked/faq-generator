@@ -59,13 +59,18 @@ function App() {
       return;
     }
     
-    // If not in popup but has success params, show toast and clear URL
+    // If not in popup but has success params, handle the connection
     if (success && !window.opener) {
       if (success === 'gmail_connected' || success === 'outlook_connected') {
-        toast.success(`${success.includes('gmail') ? 'Gmail' : 'Outlook'} account connected successfully!`);
+        // Store success info in sessionStorage to show toast after reload
+        sessionStorage.setItem('oauth_success', JSON.stringify({
+          provider: success.includes('gmail') ? 'Gmail' : 'Outlook',
+          accountId: account
+        }));
       }
-      // Clear URL parameters
+      // Clear URL parameters and reload to properly initialize the app
       window.history.replaceState({}, document.title, window.location.pathname);
+      window.location.reload();
     }
     
     // If not in popup but has error params, show error and clear URL
@@ -84,6 +89,23 @@ function App() {
     // Skip initialization if we're in an OAuth popup
     if (window.opener && (new URLSearchParams(window.location.search).get('success') || new URLSearchParams(window.location.search).get('error'))) {
       return;
+    }
+    
+    // Check for OAuth success from sessionStorage
+    const oauthSuccess = sessionStorage.getItem('oauth_success');
+    if (oauthSuccess) {
+      const { provider, accountId } = JSON.parse(oauthSuccess);
+      toast.success(`${provider} account connected successfully!`);
+      sessionStorage.removeItem('oauth_success');
+      
+      // Start email processing if we have the account ID
+      if (accountId) {
+        setTimeout(() => {
+          apiService.startEmailProcessing(accountId).catch(error => {
+            console.error('Failed to start email processing:', error);
+          });
+        }, 2000);
+      }
     }
     
     const initializeApp = async () => {
