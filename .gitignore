@@ -154,3 +154,6 @@ public/uploads/
 
 # Email attachments storage
 attachments/
+
+# Deployment credentials and sensitive data
+DEPLOYMENT_VALUES.md

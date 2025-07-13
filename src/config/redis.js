@@ -1,24 +1,20 @@
 const redis = require('redis');
 const logger = require('../utils/logger');
 
-// Redis configuration
+// Redis configuration for v4+
 const redisConfig = {
   url: process.env.REDIS_URL || 'redis://localhost:6379',
-  retry_strategy: (options) => {
-    if (options.error && options.error.code === 'ECONNREFUSED') {
-      logger.error('Redis server refused connection');
-      return new Error('Redis server refused connection');
-    }
-    if (options.total_retry_time > 1000 * 60 * 60) {
-      logger.error('Redis retry time exhausted');
-      return new Error('Retry time exhausted');
-    }
-    if (options.attempt > 10) {
-      logger.error('Redis connection attempts exhausted');
-      return undefined;
-    }
-    // Reconnect after
-    return Math.min(options.attempt * 100, 3000);
+  socket: {
+    reconnectStrategy: (retries) => {
+      if (retries > 10) {
+        logger.error('Redis connection attempts exhausted');
+        return new Error('Redis connection attempts exhausted');
+      }
+      // Exponential backoff with max 3 seconds
+      return Math.min(retries * 100, 3000);
+    },
+    connectTimeout: 10000,
+    commandTimeout: 5000
   }
 };
 
@@ -217,8 +213,10 @@ const redisClient = {
   // Connection methods
   async connect() {
     try {
-      await client.connect();
-      logger.info('Redis connection established');
+      if (!client.isOpen) {
+        await client.connect();
+        logger.info('Redis connection established');
+      }
     } catch (error) {
       logger.error('Redis connection failed:', error);
       throw error;
