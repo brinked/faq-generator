@@ -113,13 +113,37 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'client/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+// API root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    name: 'FAQ Generator API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      accounts: '/api/accounts',
+      emails: '/api/emails',
+      faqs: '/api/faqs',
+      dashboard: '/api/dashboard',
+      export: '/api/export'
+    },
+    documentation: 'https://github.com/brinked/faq-generator'
   });
+});
+
+// Serve static files in production (if client build exists)
+if (process.env.NODE_ENV === 'production') {
+  const clientBuildPath = path.join(__dirname, 'client/build');
+  const fs = require('fs');
+  
+  if (fs.existsSync(clientBuildPath)) {
+    app.use(express.static(clientBuildPath));
+    
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    });
+  }
 }
 
 // Error handling middleware
