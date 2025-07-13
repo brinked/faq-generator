@@ -29,8 +29,63 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
 
+  // Check if this is an OAuth callback in a popup window
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const error = urlParams.get('error');
+    const account = urlParams.get('account');
+    
+    // If this is an OAuth callback in a popup
+    if (window.opener && (success || error)) {
+      if (success === 'gmail_connected' || success === 'outlook_connected') {
+        // Notify the parent window
+        window.opener.postMessage({
+          type: 'OAUTH_SUCCESS',
+          provider: success.includes('gmail') ? 'gmail' : 'outlook',
+          account: account
+        }, window.location.origin);
+      } else if (error) {
+        // Notify the parent window about error
+        window.opener.postMessage({
+          type: 'OAUTH_ERROR',
+          error: error,
+          details: urlParams.get('details')
+        }, window.location.origin);
+      }
+      
+      // Close the popup
+      window.close();
+      return;
+    }
+    
+    // If not in popup but has success params, show toast and clear URL
+    if (success && !window.opener) {
+      if (success === 'gmail_connected' || success === 'outlook_connected') {
+        toast.success(`${success.includes('gmail') ? 'Gmail' : 'Outlook'} account connected successfully!`);
+      }
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    // If not in popup but has error params, show error and clear URL
+    if (error && !window.opener) {
+      const errorMessage = error === 'token_exchange_failed'
+        ? `OAuth error: ${urlParams.get('details') || 'Failed to exchange authorization code'}`
+        : `Connection failed: ${error}`;
+      toast.error(errorMessage);
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // Initialize socket connection and load initial data
   useEffect(() => {
+    // Skip initialization if we're in an OAuth popup
+    if (window.opener && (new URLSearchParams(window.location.search).get('success') || new URLSearchParams(window.location.search).get('error'))) {
+      return;
+    }
+    
     const initializeApp = async () => {
       try {
         // Initialize socket connection with proper URL detection

@@ -56,15 +56,44 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
         if (event.origin !== window.location.origin) return;
         
         if (event.data.type === 'OAUTH_SUCCESS') {
-          popup.close();
+          if (popup && !popup.closed) {
+            popup.close();
+          }
           clearInterval(checkClosed);
           setConnecting(null);
-          onAccountConnected(event.data.account);
+          
+          // Reload accounts to get the newly connected account
+          setTimeout(async () => {
+            try {
+              const accounts = await apiService.getConnectedAccounts();
+              const newAccount = accounts.find(acc =>
+                acc.provider === event.data.provider &&
+                !connectedAccounts.find(existing => existing.id === acc.id)
+              );
+              
+              if (newAccount) {
+                onAccountConnected(newAccount);
+              } else if (event.data.account) {
+                // If we have the account ID, find it in the accounts list
+                const allAccounts = await apiService.getConnectedAccounts();
+                const connectedAccount = allAccounts.find(acc => acc.id === event.data.account);
+                if (connectedAccount) {
+                  onAccountConnected(connectedAccount);
+                }
+              }
+            } catch (error) {
+              console.error('Failed to check connected accounts:', error);
+              toast.error('Account connected but failed to load details');
+            }
+          }, 500);
         } else if (event.data.type === 'OAUTH_ERROR') {
-          popup.close();
+          if (popup && !popup.closed) {
+            popup.close();
+          }
           clearInterval(checkClosed);
           setConnecting(null);
-          toast.error(event.data.message || 'Authentication failed');
+          const errorMessage = event.data.details || event.data.error || 'Authentication failed';
+          toast.error(errorMessage);
         }
       };
 
