@@ -44,27 +44,20 @@ class GmailService {
   async getTokens(code) {
     try {
       logger.info('Attempting to exchange authorization code for tokens');
-      const response = await this.oauth2Client.getAccessToken(code);
       
-      // Log the response structure for debugging
-      logger.info('OAuth response structure:', {
-        hasTokens: !!response?.tokens,
-        responseKeys: Object.keys(response || {}),
-        responseType: typeof response
+      // The correct way to exchange the code for tokens
+      const { tokens } = await this.oauth2Client.getToken(code);
+      
+      logger.info('Successfully obtained tokens:', {
+        hasAccessToken: !!tokens.access_token,
+        hasRefreshToken: !!tokens.refresh_token,
+        expiresIn: tokens.expiry_date
       });
       
-      // Handle different response formats
-      if (response && response.tokens) {
-        return response.tokens;
-      } else if (response && (response.access_token || response.accessToken)) {
-        // Some versions return tokens directly in the response
-        return response;
-      } else {
-        logger.error('Unexpected OAuth response format:', response);
-        throw new Error('Invalid token response format');
-      }
+      return tokens;
     } catch (error) {
-      logger.error('Error getting Gmail tokens:', error);
+      logger.error('Error getting Gmail tokens:', error.message);
+      logger.error('Full error details:', error);
       throw new Error('Failed to exchange authorization code for tokens');
     }
   }
