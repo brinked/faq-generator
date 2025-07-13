@@ -14,9 +14,9 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
     try {
       let authUrl;
       if (provider === 'gmail') {
-        authUrl = apiService.getGmailAuthUrl();
+        authUrl = await apiService.getGmailAuthUrl();
       } else if (provider === 'outlook') {
-        authUrl = apiService.getOutlookAuthUrl();
+        authUrl = await apiService.getOutlookAuthUrl();
       }
 
       // Open OAuth popup

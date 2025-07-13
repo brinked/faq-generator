@@ -213,12 +213,14 @@ class ApiService {
   }
 
   // OAuth URL generation
-  getGmailAuthUrl() {
-    return `${this.baseURL}/api/auth/gmail`;
+  async getGmailAuthUrl() {
+    const response = await this.request('/api/auth/gmail/url');
+    return response.authUrl;
   }
 
-  getOutlookAuthUrl() {
-    return `${this.baseURL}/api/auth/outlook`;
+  async getOutlookAuthUrl() {
+    const response = await this.request('/api/auth/outlook/url');
+    return response.authUrl;
   }
 
   // File download helper
