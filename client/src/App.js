@@ -29,33 +29,61 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
 
-  // Check if this is an OAuth callback in a popup window
+  // Check if this is an OAuth callback in a popup window - do this immediately
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const success = urlParams.get('success');
     const error = urlParams.get('error');
     const account = urlParams.get('account');
     
+    // Check if we're in a popup by looking for window.opener or window name
+    const isPopup = window.opener !== null || window.name === 'oauth';
+    
     // If this is an OAuth callback in a popup
-    if (window.opener && (success || error)) {
+    if (isPopup && (success || error)) {
+      // Show a message while closing
+      document.body.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif;"><div style="text-align: center;"><h2>Authentication Complete</h2><p>This window will close automatically...</p></div></div>';
+      
       if (success === 'gmail_connected' || success === 'outlook_connected') {
-        // Notify the parent window
-        window.opener.postMessage({
-          type: 'OAUTH_SUCCESS',
-          provider: success.includes('gmail') ? 'gmail' : 'outlook',
-          account: account
-        }, window.location.origin);
+        // Try to notify the parent window if it exists
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.postMessage({
+              type: 'OAUTH_SUCCESS',
+              provider: success.includes('gmail') ? 'gmail' : 'outlook',
+              account: account
+            }, window.location.origin);
+          } catch (e) {
+            console.error('Failed to post message to parent:', e);
+          }
+        }
       } else if (error) {
-        // Notify the parent window about error
-        window.opener.postMessage({
-          type: 'OAUTH_ERROR',
-          error: error,
-          details: urlParams.get('details')
-        }, window.location.origin);
+        // Try to notify the parent window about error
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.postMessage({
+              type: 'OAUTH_ERROR',
+              error: error,
+              details: urlParams.get('details')
+            }, window.location.origin);
+          } catch (e) {
+            console.error('Failed to post message to parent:', e);
+          }
+        }
       }
       
-      // Close the popup
-      window.close();
+      // Close the popup after a short delay
+      setTimeout(() => {
+        window.close();
+        // If window.close() doesn't work, show instructions
+        setTimeout(() => {
+          if (!window.closed) {
+            document.body.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif;"><div style="text-align: center;"><h2>Authentication Complete</h2><p>You can close this window now.</p></div></div>';
+          }
+        }, 500);
+      }, 1000);
+      
+      // Don't render the React app
       return;
     }
     
@@ -84,12 +112,18 @@ function App() {
     }
   }, []);
 
+  // Check if we should render the app
+  const urlParams = new URLSearchParams(window.location.search);
+  const isOAuthCallback = urlParams.get('success') || urlParams.get('error');
+  const isPopup = window.opener !== null || window.name === 'oauth';
+  
+  // Don't render the app if we're in an OAuth popup
+  if (isPopup && isOAuthCallback) {
+    return null;
+  }
+
   // Initialize socket connection and load initial data
   useEffect(() => {
-    // Skip initialization if we're in an OAuth popup
-    if (window.opener && (new URLSearchParams(window.location.search).get('success') || new URLSearchParams(window.location.search).get('error'))) {
-      return;
-    }
     
     // Check for OAuth success from sessionStorage
     const oauthSuccess = sessionStorage.getItem('oauth_success');
