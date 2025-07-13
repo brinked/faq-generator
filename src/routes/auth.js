@@ -77,11 +77,11 @@ router.get('/gmail/callback', async (req, res) => {
     
     if (error) {
       logger.error('Gmail OAuth error:', error);
-      return res.redirect(`${corsOrigin}/dashboard?error=oauth_denied`);
+      return res.redirect(`${corsOrigin}/?error=oauth_denied`);
     }
     
     if (!code) {
-      return res.redirect(`${corsOrigin}/dashboard?error=no_code`);
+      return res.redirect(`${corsOrigin}/?error=no_code`);
     }
 
     // Exchange code for tokens
@@ -105,11 +105,11 @@ router.get('/gmail/callback', async (req, res) => {
     
     logger.info(`Gmail account connected: ${profile.email}`);
     
-    res.redirect(`${corsOrigin}/dashboard?success=gmail_connected&account=${account.id}`);
+    res.redirect(`${corsOrigin}/?success=gmail_connected&account=${account.id}`);
     
   } catch (error) {
     logger.error('Gmail callback error:', error);
-    res.redirect(`${corsOrigin}/dashboard?error=connection_failed`);
+    res.redirect(`${corsOrigin}/?error=connection_failed`);
   }
 });
 
@@ -143,11 +143,11 @@ router.get('/outlook/callback', async (req, res) => {
     
     if (error) {
       logger.error('Outlook OAuth error:', error);
-      return res.redirect(`${corsOrigin}/dashboard?error=oauth_denied`);
+      return res.redirect(`${corsOrigin}/?error=oauth_denied`);
     }
     
     if (!code) {
-      return res.redirect(`${corsOrigin}/dashboard?error=no_code`);
+      return res.redirect(`${corsOrigin}/?error=no_code`);
     }
 
     // Exchange code for tokens
@@ -170,11 +170,11 @@ router.get('/outlook/callback', async (req, res) => {
     
     logger.info(`Outlook account connected: ${profile.mail || profile.userPrincipalName}`);
     
-    res.redirect(`${corsOrigin}/dashboard?success=outlook_connected&account=${account.id}`);
+    res.redirect(`${corsOrigin}/?success=outlook_connected&account=${account.id}`);
     
   } catch (error) {
     logger.error('Outlook callback error:', error);
-    res.redirect(`${corsOrigin}/dashboard?error=connection_failed`);
+    res.redirect(`${corsOrigin}/?error=connection_failed`);
   }
 });
 
