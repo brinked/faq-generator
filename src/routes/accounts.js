@@ -416,4 +416,67 @@ router.patch('/:accountId/status', async (req, res) => {
   }
 });
 
+/**
+ * Get current sync status for an account
+ */
+router.get('/:accountId/sync-status', async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    
+    // Get account info
+    const accountQuery = `
+      SELECT id, email_address, status, last_sync_at
+      FROM email_accounts
+      WHERE id = $1
+    `;
+    const accountResult = await db.query(accountQuery, [accountId]);
+    
+    if (accountResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account not found'
+      });
+    }
+    
+    const account = accountResult.rows[0];
+    
+    // Get latest sync job
+    const jobQuery = `
+      SELECT id, status, started_at, completed_at, error_message, metadata
+      FROM processing_jobs
+      WHERE account_id = $1 AND job_type = 'email_sync'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    const jobResult = await db.query(jobQuery, [accountId]);
+    
+    // Get email count
+    const emailCountQuery = `
+      SELECT COUNT(*) as total_emails
+      FROM emails
+      WHERE account_id = $1
+    `;
+    const emailCountResult = await db.query(emailCountQuery, [accountId]);
+    
+    res.json({
+      success: true,
+      account: {
+        id: account.id,
+        email: account.email_address,
+        status: account.status,
+        lastSyncAt: account.last_sync_at
+      },
+      currentSync: jobResult.rows.length > 0 ? jobResult.rows[0] : null,
+      emailCount: parseInt(emailCountResult.rows[0].total_emails)
+    });
+    
+  } catch (error) {
+    logger.error(`Error getting sync status for account ${req.params.accountId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get sync status'
+    });
+  }
+});
+
 module.exports = router;
