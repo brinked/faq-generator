@@ -116,6 +116,9 @@ if (process.env.NODE_ENV !== 'production') {
   logger.info('OAuth debug routes enabled at /api/debug/oauth');
 }
 
+// Test database route
+app.use('/api/test/db', testDbRoutes);
+
 // Enhanced logging for all /api routes to debug routing issues
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {

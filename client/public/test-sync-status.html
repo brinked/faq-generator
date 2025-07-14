@@ -72,6 +72,13 @@
         <pre id="processing-result"></pre>
     </div>
 
+    <div class="section">
+        <h2>5. Test Database Connection</h2>
+        <button id="test-db-btn">Test Database</button>
+        <button id="create-tables-btn">Create Missing Tables</button>
+        <pre id="db-result"></pre>
+    </div>
+
     <script>
         const API_BASE = 'https://faq-generator.onrender.com';
 
@@ -178,6 +185,28 @@
             }
         }
 
+        async function testDatabase() {
+            const resultEl = document.getElementById('db-result');
+            try {
+                resultEl.textContent = 'Testing database...';
+                const data = await makeRequest('/api/test/db/test');
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function createTables() {
+            const resultEl = document.getElementById('db-result');
+            try {
+                resultEl.textContent = 'Creating tables...';
+                const data = await makeRequest('/api/test/db/create-tables', 'POST');
+                resultEl.innerHTML = `<span class="success">Tables created!</span>\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
         // Auto-load accounts on page load
         window.onload = () => {
             getAccounts();
@@ -187,6 +216,8 @@
             document.getElementById('check-status-btn').addEventListener('click', checkSyncStatus);
             document.getElementById('start-sync-btn').addEventListener('click', startSync);
             document.getElementById('get-processing-btn').addEventListener('click', getProcessingStatus);
+            document.getElementById('test-db-btn').addEventListener('click', testDatabase);
+            document.getElementById('create-tables-btn').addEventListener('click', createTables);
         };
     </script>
 </body>
