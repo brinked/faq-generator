@@ -166,7 +166,16 @@ class GmailService {
       if (pageToken) params.pageToken = pageToken;
       if (labelIds) params.labelIds = labelIds;
 
+      logger.info('Calling Gmail API messages.list', { params });
+
       const response = await this.gmail.users.messages.list(params);
+      
+      logger.info('Gmail API messages.list response', {
+        messagesCount: response.data.messages?.length || 0,
+        resultSizeEstimate: response.data.resultSizeEstimate,
+        nextPageToken: response.data.nextPageToken
+      });
+
       return response.data;
     } catch (error) {
       logger.error('Error getting Gmail messages:', error);
@@ -329,7 +338,11 @@ class GmailService {
         sinceDate = null
       } = options;
 
-      logger.info(`Starting Gmail sync for account ${accountId}`);
+      logger.info(`Starting Gmail sync for account ${accountId}`, {
+        maxEmails,
+        query,
+        sinceDate
+      });
       const startTime = Date.now();
 
       // Build query for incremental sync
@@ -339,11 +352,15 @@ class GmailService {
         searchQuery += ` after:${dateStr}`;
       }
 
+      logger.info(`Gmail sync query: "${searchQuery}" for account ${accountId}`);
+
       // Get message list
       const messageList = await this.getMessages({
         query: searchQuery,
         maxResults: maxEmails
       });
+
+      logger.info(`Gmail API returned ${messageList.messages?.length || 0} messages for account ${accountId}`);
 
       if (!messageList.messages || messageList.messages.length === 0) {
         logger.info(`No new messages found for account ${accountId}`);
@@ -352,6 +369,8 @@ class GmailService {
 
       // Get detailed messages in batches
       const messageIds = messageList.messages.map(m => m.id);
+      logger.info(`Fetching ${messageIds.length} messages in batches for account ${accountId}`);
+      
       const messages = await this.getMessagesBatch(messageIds);
 
       const duration = Date.now() - startTime;

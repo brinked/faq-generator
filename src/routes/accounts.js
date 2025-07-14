@@ -139,12 +139,22 @@ router.post('/:accountId/sync', async (req, res) => {
     const { accountId } = req.params;
     const { maxEmails, sinceDate } = req.body;
     
+    logger.info(`Starting email sync for account ${accountId}`, {
+      maxEmails,
+      sinceDate,
+      body: req.body
+    });
+    
     const options = {};
     if (maxEmails) options.maxEmails = parseInt(maxEmails);
     if (sinceDate) options.sinceDate = new Date(sinceDate);
     
     // Start sync (this will run in background)
     const syncResult = await emailService.syncAccount(accountId, options);
+    
+    logger.info(`Email sync initiated for account ${accountId}`, {
+      syncResult
+    });
     
     res.json({
       success: true,
