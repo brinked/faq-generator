@@ -247,10 +247,12 @@ function App() {
       toast.success(`${accountData.provider} account connected successfully! Click "Next Step" to continue.`);
       
       // Start email processing
-      await apiService.startEmailProcessing(accountData.id);
+      console.log('Starting email processing for account:', accountData.id);
+      const result = await apiService.startEmailProcessing(accountData.id);
+      console.log('Email processing started:', result);
     } catch (error) {
       console.error('Failed to handle account connection:', error);
-      toast.error('Failed to start email processing');
+      toast.error('Failed to start email processing: ' + error.message);
     }
   };
 
@@ -275,7 +277,9 @@ function App() {
   // Handle manual email sync
   const handleSyncEmails = async () => {
     try {
-      await apiService.syncAllEmails();
+      console.log('Starting email sync...');
+      const result = await apiService.syncAllEmails();
+      console.log('Sync result:', result);
       toast.success('Email sync started');
     } catch (error) {
       console.error('Failed to sync emails:', error);
