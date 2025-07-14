@@ -12,6 +12,38 @@
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>FAQ Generator - AI-Powered Email Analysis</title>
+    
+    <!-- Tailwind CSS with fallback -->
+    <script>
+      // Create a dummy tailwind object to prevent errors
+      window.tailwind = { config: {} };
+    </script>
+    <script src="https://cdn.tailwindcss.com" onerror="console.warn('Tailwind CDN failed to load')"></script>
+    
+    <!-- Override the dummy if real Tailwind loads -->
+    <script>
+      if (window.tailwind && window.tailwind.config) {
+        window.tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                primary: {
+                  50: '#eff6ff',
+                  500: '#3b82f6',
+                  600: '#2563eb',
+                  700: '#1d4ed8'
+                }
+              },
+              animation: {
+                'fade-in': 'fadeIn 0.5s ease-in-out',
+                'slide-up': 'slideUp 0.3s ease-out',
+                'pulse-slow': 'pulse 3s infinite'
+              }
+            }
+          }
+        }
+      }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
