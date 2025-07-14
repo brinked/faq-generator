@@ -116,6 +116,10 @@ class ApiService {
     return this.request('/api/dashboard/processing-status');
   }
 
+  async getSyncStatus(accountId) {
+    return this.request(`/api/accounts/${accountId}/sync-status`);
+  }
+
   // FAQ management
   async getFAQs(filters = {}) {
     const queryParams = new URLSearchParams();
