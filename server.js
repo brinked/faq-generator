@@ -18,6 +18,7 @@ const accountRoutes = require('./src/routes/accounts');
 const dashboardRoutes = require('./src/routes/dashboard');
 const exportRoutes = require('./src/routes/export');
 const debugOAuthRoutes = require('./src/routes/debug-oauth');
+const testOAuthCallbackRoutes = require('./src/routes/test-oauth-callback');
 const { initializeQueues } = require('./src/services/queueService');
 const { startScheduledJobs } = require('./src/services/schedulerService');
 
@@ -106,18 +107,35 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
 
+// Test OAuth callback route (temporary for debugging)
+app.use('/api/test/oauth', testOAuthCallbackRoutes);
+
 // Debug routes (only in development)
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug/oauth', debugOAuthRoutes);
   logger.info('OAuth debug routes enabled at /api/debug/oauth');
 }
 
-// Log any requests to OAuth callback URLs for debugging
+// Enhanced logging for all /api routes to debug routing issues
 app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    logger.info(`API Request: ${req.method} ${req.path}`, {
+      query: req.query,
+      headers: {
+        host: req.headers.host,
+        referer: req.headers.referer,
+        'user-agent': req.headers['user-agent']
+      }
+    });
+  }
+  
+  // Special logging for OAuth callbacks
   if (req.path === '/api/auth/gmail/callback' || req.path === '/api/auth/outlook/callback') {
     logger.warn(`OAuth callback reached middleware: ${req.path}`, {
       query: req.query,
-      method: req.method
+      method: req.method,
+      hasCode: !!req.query.code,
+      hasError: !!req.query.error
     });
   }
   next();
