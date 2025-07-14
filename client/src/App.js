@@ -36,6 +36,16 @@ function App() {
     const error = urlParams.get('error');
     const account = urlParams.get('account');
     
+    console.log('OAuth callback check:', {
+      url: window.location.href,
+      hasOpener: !!window.opener,
+      windowName: window.name,
+      success,
+      error,
+      account,
+      searchParams: window.location.search
+    });
+    
     // Check if we're in a popup by looking for window.opener or window name
     const isPopup = window.opener !== null || window.name === 'oauth';
     

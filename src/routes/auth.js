@@ -83,11 +83,21 @@ router.get('/gmail/callback', async (req, res) => {
     
     if (error) {
       logger.error('Gmail OAuth error:', error);
-      return res.redirect(`${corsOrigin}/?error=oauth_denied`);
+      const errorRedirectUrl = `${corsOrigin}/?error=oauth_denied`;
+      logger.error('Redirecting due to OAuth denial:', {
+        corsOrigin,
+        errorRedirectUrl
+      });
+      return res.redirect(errorRedirectUrl);
     }
     
     if (!code) {
-      return res.redirect(`${corsOrigin}/?error=no_code`);
+      const errorRedirectUrl = `${corsOrigin}/?error=no_code`;
+      logger.error('No authorization code received:', {
+        corsOrigin,
+        errorRedirectUrl
+      });
+      return res.redirect(errorRedirectUrl);
     }
 
     // Exchange code for tokens
@@ -133,11 +143,24 @@ router.get('/gmail/callback', async (req, res) => {
     
     logger.info(`Gmail account connected: ${profile.email}`);
     
-    res.redirect(`${corsOrigin}/?success=gmail_connected&account=${account.id}`);
+    const redirectUrl = `${corsOrigin}/?success=gmail_connected&account=${account.id}`;
+    logger.info('Redirecting after Gmail OAuth success:', {
+      corsOrigin,
+      redirectUrl,
+      accountId: account.id
+    });
+    
+    res.redirect(redirectUrl);
     
   } catch (error) {
     logger.error('Gmail callback error:', error);
-    res.redirect(`${corsOrigin}/?error=connection_failed`);
+    const errorRedirectUrl = `${corsOrigin}/?error=connection_failed`;
+    logger.error('Redirecting after Gmail OAuth error:', {
+      corsOrigin,
+      errorRedirectUrl,
+      errorMessage: error.message
+    });
+    res.redirect(errorRedirectUrl);
   }
 });
 
