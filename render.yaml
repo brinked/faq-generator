@@ -28,6 +28,8 @@ services:
         generateValue: true
       - key: SESSION_SECRET
         generateValue: true
+      - key: BASE_URL
+        value: https://faq-generator-web.onrender.com
       - key: CORS_ORIGIN
         value: https://faq-generator-web.onrender.com
       - key: GMAIL_CLIENT_ID
@@ -35,13 +37,13 @@ services:
       - key: GMAIL_CLIENT_SECRET
         sync: false
       - key: GMAIL_REDIRECT_URI
-        value: https://faq-generator-web.onrender.com/auth/gmail/callback
+        value: https://faq-generator-web.onrender.com/api/auth/gmail/callback
       - key: OUTLOOK_CLIENT_ID
         sync: false
       - key: OUTLOOK_CLIENT_SECRET
         sync: false
       - key: OUTLOOK_REDIRECT_URI
-        value: https://faq-generator-web.onrender.com/auth/outlook/callback
+        value: https://faq-generator-web.onrender.com/api/auth/outlook/callback
       - key: OUTLOOK_TENANT_ID
         value: common
       - key: OPENAI_API_KEY
