@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Sync Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>FAQ Generator - Sync Status Tester</h1>
+    
+    <div class="section">
+        <h2>1. Get Connected Accounts</h2>
+        <button onclick="getAccounts()">Get Accounts</button>
+        <pre id="accounts-result"></pre>
+    </div>
+
+    <div class="section">
+        <h2>2. Check Sync Status</h2>
+        <input type="text" id="account-id" placeholder="Enter Account ID" style="padding: 8px; width: 300px;">
+        <button onclick="checkSyncStatus()">Check Status</button>
+        <pre id="sync-status-result"></pre>
+    </div>
+
+    <div class="section">
+        <h2>3. Start Email Sync</h2>
+        <input type="text" id="sync-account-id" placeholder="Enter Account ID" style="padding: 8px; width: 300px;">
+        <button onclick="startSync()">Start Sync</button>
+        <pre id="sync-result"></pre>
+    </div>
+
+    <div class="section">
+        <h2>4. Check Processing Status</h2>
+        <button onclick="getProcessingStatus()">Get Processing Status</button>
+        <pre id="processing-result"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'https://faq-generator.onrender.com';
+
+        async function makeRequest(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                
+                return data;
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function getAccounts() {
+            const resultEl = document.getElementById('accounts-result');
+            try {
+                resultEl.textContent = 'Loading...';
+                const data = await makeRequest('/api/accounts');
+                resultEl.textContent = JSON.stringify(data, null, 2);
+                
+                // Auto-fill account ID if only one account
+                if (data.accounts && data.accounts.length === 1) {
+                    document.getElementById('account-id').value = data.accounts[0].id;
+                    document.getElementById('sync-account-id').value = data.accounts[0].id;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function checkSyncStatus() {
+            const accountId = document.getElementById('account-id').value;
+            const resultEl = document.getElementById('sync-status-result');
+            
+            if (!accountId) {
+                resultEl.innerHTML = '<span class="error">Please enter an account ID</span>';
+                return;
+            }
+            
+            try {
+                resultEl.textContent = 'Loading...';
+                const data = await makeRequest(`/api/accounts/${accountId}/sync-status`);
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function startSync() {
+            const accountId = document.getElementById('sync-account-id').value;
+            const resultEl = document.getElementById('sync-result');
+            
+            if (!accountId) {
+                resultEl.innerHTML = '<span class="error">Please enter an account ID</span>';
+                return;
+            }
+            
+            try {
+                resultEl.textContent = 'Starting sync...';
+                const data = await makeRequest(`/api/accounts/${accountId}/sync`, 'POST');
+                resultEl.innerHTML = `<span class="success">Sync started!</span>\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function getProcessingStatus() {
+            const resultEl = document.getElementById('processing-result');
+            try {
+                resultEl.textContent = 'Loading...';
+                const data = await makeRequest('/api/dashboard/processing-status');
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+
+        // Auto-load accounts on page load
+        window.onload = () => {
+            getAccounts();
+        };
+    </script>
+</body>
+</html>
