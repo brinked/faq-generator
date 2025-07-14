@@ -443,7 +443,7 @@ router.get('/:accountId/sync-status', async (req, res) => {
     
     // Get latest sync job
     const jobQuery = `
-      SELECT id, status, started_at, completed_at, error_message, metadata
+      SELECT id, status, started_at, completed_at, error_message
       FROM processing_jobs
       WHERE account_id = $1 AND job_type = 'email_sync'
       ORDER BY created_at DESC
