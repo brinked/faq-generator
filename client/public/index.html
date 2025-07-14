@@ -12,52 +12,6 @@
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>FAQ Generator - AI-Powered Email Analysis</title>
-    
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Custom Tailwind Config -->
-    <script>
-      // Wrap in try-catch to prevent errors if Tailwind CDN is blocked
-      try {
-        if (typeof tailwind !== 'undefined') {
-          tailwind.config = {
-            theme: {
-              extend: {
-                colors: {
-                  primary: {
-                    50: '#eff6ff',
-                    500: '#3b82f6',
-                    600: '#2563eb',
-                    700: '#1d4ed8'
-                  }
-                },
-                animation: {
-                  'fade-in': 'fadeIn 0.5s ease-in-out',
-                  'slide-up': 'slideUp 0.3s ease-out',
-                  'pulse-slow': 'pulse 3s infinite'
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Tailwind CSS configuration failed:', e);
-      }
-    </script>
-    
-    <!-- Fallback styles if Tailwind fails to load -->
-    <style>
-      /* Basic fallback styles */
-      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
-      .text-center { text-align: center; }
-      .mt-4 { margin-top: 1rem; }
-      .p-4 { padding: 1rem; }
-      .bg-blue-500 { background-color: #3b82f6; }
-      .text-white { color: white; }
-      .rounded { border-radius: 0.25rem; }
-      .shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
