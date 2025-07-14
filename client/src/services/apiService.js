@@ -49,7 +49,8 @@ class ApiService {
 
   // Account management
   async getConnectedAccounts() {
-    return this.request('/api/accounts');
+    const response = await this.request('/api/accounts');
+    return response.accounts || [];
   }
 
   async connectGmailAccount() {
@@ -129,7 +130,10 @@ class ApiService {
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/api/faqs?${queryString}` : '/api/faqs';
     
-    return this.request(endpoint);
+    const response = await this.request(endpoint);
+    // The API returns { success: true, faqs: [...], pagination: {...} }
+    // But the component expects just the array
+    return response.faqs || [];
   }
 
   async getFAQById(faqId) {
