@@ -480,4 +480,57 @@ router.get('/:accountId/sync-status', async (req, res) => {
   }
 });
 
+// Get Gmail message count for an account
+router.get('/:accountId/gmail-count', async (req, res) => {
+  try {
+    const accountId = req.params.accountId;
+    
+    // Get account details
+    const accountQuery = 'SELECT * FROM email_accounts WHERE id = $1';
+    const accountResult = await db.query(accountQuery, [accountId]);
+    
+    if (accountResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account not found'
+      });
+    }
+    
+    const account = accountResult.rows[0];
+    
+    if (account.provider !== 'gmail') {
+      return res.status(400).json({
+        success: false,
+        error: 'This endpoint only works for Gmail accounts'
+      });
+    }
+    
+    // Initialize Gmail service
+    const GmailService = require('../services/gmailService');
+    const gmailService = new GmailService();
+    
+    // Set credentials
+    gmailService.setCredentials({
+      access_token: account.access_token,
+      refresh_token: account.refresh_token
+    });
+    
+    // Get message count
+    const messages = await gmailService.getMessages({ maxResults: 1 });
+    
+    res.json({
+      success: true,
+      totalMessages: messages.resultSizeEstimate || 0,
+      accountEmail: account.email_address
+    });
+    
+  } catch (error) {
+    logger.error(`Error getting Gmail count for account ${req.params.accountId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get Gmail message count'
+    });
+  }
+});
+
 module.exports = router;

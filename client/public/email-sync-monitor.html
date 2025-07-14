@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Sync & Processing Monitor</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .status-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status-card h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #0056b3;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            padding-left: 10px;
+        }
+        .log-entry.error {
+            border-left-color: #dc3545;
+            color: #dc3545;
+        }
+        .log-entry.success {
+            border-left-color: #28a745;
+            color: #28a745;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Email Sync & Processing Monitor</h1>
+        
+        <div class="status-card">
+            <h3>Account Status</h3>
+            <div id="accountInfo">Loading account information...</div>
+        </div>
+
+        <div class="status-card">
+            <h3>Email Sync Progress</h3>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="totalEmails">0</div>
+                    <div class="stat-label">Total Emails in Gmail</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="syncedEmails">0</div>
+                    <div class="stat-label">Emails Synced</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="processedEmails">0</div>
+                    <div class="stat-label">Emails Processed</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="extractedQuestions">0</div>
+                    <div class="stat-label">Questions Found</div>
+                </div>
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="syncProgress" style="width: 0%">0%</div>
+            </div>
+            
+            <div id="syncStatus">Ready to start sync</div>
+        </div>
+
+        <div class="status-card">
+            <h3>Actions</h3>
+            <button id="checkStatusBtn" onclick="checkStatus()">Check Current Status</button>
+            <button id="startSyncBtn" onclick="startSync()">Start Email Sync</button>
+            <button id="processEmailsBtn" onclick="processEmails()" disabled>Process Emails</button>
+            <button id="generateFaqsBtn" onclick="generateFaqs()" disabled>Generate FAQs</button>
+            <button id="autoProcessBtn" onclick="startAutoProcess()">Auto Process All</button>
+        </div>
+
+        <div class="status-card">
+            <h3>Activity Log</h3>
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">Waiting for action...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let syncInterval = null;
+        let processInterval = null;
+        let accountId = null;
+
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        async function checkStatus() {
+            addLog('Checking account status...');
+            
+            try {
+                // Get accounts
+                const accountsRes = await fetch(`${API_BASE}/accounts`);
+                const accounts = await accountsRes.json();
+                
+                if (!accounts || accounts.length === 0) {
+                    addLog('No email accounts connected', 'error');
+                    document.getElementById('accountInfo').innerHTML =
+                        '<p style="color: #dc3545;">No email accounts connected. Please connect an account first.</p>';
+                    return;
+                }
+                
+                accountId = accounts[0].id;
+                const account = accounts[0];
+                
+                document.getElementById('accountInfo').innerHTML = `
+                    <p><strong>Email:</strong> ${account.email_address}</p>
+                    <p><strong>Provider:</strong> ${account.provider}</p>
+                    <p><strong>Status:</strong> ${account.status}</p>
+                    <p><strong>Last Sync:</strong> ${account.last_sync_at ? new Date(account.last_sync_at).toLocaleString() : 'Never'}</p>
+                `;
+                
+                // Get total Gmail count
+                if (account.provider === 'gmail') {
+                    try {
+                        const gmailCountRes = await fetch(`${API_BASE}/accounts/${accountId}/gmail-count`);
+                        const gmailCount = await gmailCountRes.json();
+                        if (gmailCount.success) {
+                            document.getElementById('totalEmails').textContent = gmailCount.totalMessages;
+                            addLog(`Gmail account has ${gmailCount.totalMessages} total messages`);
+                        }
+                    } catch (error) {
+                        addLog('Could not fetch Gmail message count', 'error');
+                    }
+                }
+                
+                // Get sync status
+                const syncStatusRes = await fetch(`${API_BASE}/accounts/${accountId}/sync-status`);
+                const syncStatus = await syncStatusRes.json();
+                
+                document.getElementById('syncedEmails').textContent = syncStatus.totalEmails || 0;
+                
+                // Get unprocessed emails count
+                const unprocessedRes = await fetch(`${API_BASE}/emails/unprocessed`);
+                const unprocessed = await unprocessedRes.json();
+                
+                const processedCount = (syncStatus.totalEmails || 0) - (unprocessed.emails ? unprocessed.emails.length : 0);
+                document.getElementById('processedEmails').textContent = processedCount;
+                
+                // Get questions count
+                const questionsRes = await fetch(`${API_BASE}/emails/questions`);
+                const questions = await questionsRes.json();
+                document.getElementById('extractedQuestions').textContent = questions.length || 0;
+                
+                // Enable/disable buttons
+                if (unprocessed.emails && unprocessed.emails.length > 0) {
+                    document.getElementById('processEmailsBtn').disabled = false;
+                    addLog(`Found ${unprocessed.emails.length} unprocessed emails`, 'success');
+                }
+                
+                if (questions.length > 0) {
+                    document.getElementById('generateFaqsBtn').disabled = false;
+                }
+                
+                addLog('Status check complete', 'success');
+                
+            } catch (error) {
+                addLog(`Error checking status: ${error.message}`, 'error');
+            }
+        }
+
+        async function startSync() {
+            const btn = document.getElementById('startSyncBtn');
+            btn.disabled = true;
+            btn.innerHTML = 'Syncing... <span class="spinner"></span>';
+            
+            addLog('Starting email sync...');
+            document.getElementById('syncStatus').innerHTML = 'Syncing emails... <span class="spinner"></span>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/accounts/${accountId}/sync`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Sync failed: ${response.statusText}`);
+                }
+                
+                // Start monitoring sync progress
+                monitorSyncProgress();
+                
+            } catch (error) {
+                addLog(`Sync error: ${error.message}`, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Start Email Sync';
+                document.getElementById('syncStatus').textContent = 'Sync failed';
+            }
+        }
+
+        function monitorSyncProgress() {
+            let checkCount = 0;
+            
+            syncInterval = setInterval(async () => {
+                checkCount++;
+                
+                try {
+                    const statusRes = await fetch(`${API_BASE}/accounts/${accountId}/sync-status`);
+                    const status = await statusRes.json();
+                    
+                    if (status.latestSync) {
+                        const sync = status.latestSync;
+                        
+                        if (sync.status === 'completed') {
+                            clearInterval(syncInterval);
+                            document.getElementById('syncStatus').textContent = 'Sync completed!';
+                            document.getElementById('startSyncBtn').disabled = false;
+                            document.getElementById('startSyncBtn').textContent = 'Start Email Sync';
+                            addLog(`Sync completed! Synced ${status.totalEmails} emails`, 'success');
+                            
+                            // Update counts
+                            document.getElementById('syncedEmails').textContent = status.totalEmails;
+                            
+                            // Check for unprocessed emails
+                            await checkStatus();
+                            
+                        } else if (sync.status === 'failed') {
+                            clearInterval(syncInterval);
+                            document.getElementById('syncStatus').textContent = `Sync failed: ${sync.error_message}`;
+                            document.getElementById('startSyncBtn').disabled = false;
+                            document.getElementById('startSyncBtn').textContent = 'Start Email Sync';
+                            addLog(`Sync failed: ${sync.error_message}`, 'error');
+                        } else {
+                            // Still in progress
+                            document.getElementById('syncStatus').innerHTML = 
+                                `Syncing... (checking for ${checkCount * 2} seconds) <span class="spinner"></span>`;
+                            
+                            // Estimate progress
+                            const progress = Math.min(checkCount * 5, 90);
+                            document.getElementById('syncProgress').style.width = progress + '%';
+                            document.getElementById('syncProgress').textContent = progress + '%';
+                        }
+                    }
+                    
+                    // Update email count
+                    document.getElementById('syncedEmails').textContent = status.totalEmails || 0;
+                    
+                } catch (error) {
+                    addLog(`Error checking sync status: ${error.message}`, 'error');
+                }
+                
+                // Timeout after 5 minutes
+                if (checkCount > 150) {
+                    clearInterval(syncInterval);
+                    document.getElementById('syncStatus').textContent = 'Sync timeout - please check server logs';
+                    document.getElementById('startSyncBtn').disabled = false;
+                    document.getElementById('startSyncBtn').textContent = 'Start Email Sync';
+                }
+                
+            }, 2000); // Check every 2 seconds
+        }
+
+        async function processEmails() {
+            const btn = document.getElementById('processEmailsBtn');
+            btn.disabled = true;
+            btn.innerHTML = 'Processing... <span class="spinner"></span>';
+            
+            addLog('Starting email processing...');
+            
+            try {
+                // Get unprocessed emails first
+                const unprocessedRes = await fetch(`${API_BASE}/emails/unprocessed`);
+                const unprocessed = await unprocessedRes.json();
+                
+                if (!unprocessed.emails || unprocessed.emails.length === 0) {
+                    addLog('No unprocessed emails found', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Process Emails';
+                    return;
+                }
+                
+                const totalToProcess = unprocessed.emails.length;
+                addLog(`Processing ${totalToProcess} emails...`);
+                
+                // Process in batches of 10
+                const batchSize = 10;
+                let processed = 0;
+                
+                for (let i = 0; i < unprocessed.emails.length; i += batchSize) {
+                    const batch = unprocessed.emails.slice(i, i + batchSize);
+                    const emailIds = batch.map(e => e.id);
+                    
+                    addLog(`Processing batch ${Math.floor(i/batchSize) + 1} (${batch.length} emails)...`);
+                    
+                    const response = await fetch(`${API_BASE}/emails/bulk/process`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ emailIds })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        processed += result.processed || batch.length;
+                        
+                        // Update progress
+                        const progress = Math.round((processed / totalToProcess) * 100);
+                        document.getElementById('syncProgress').style.width = progress + '%';
+                        document.getElementById('syncProgress').textContent = progress + '%';
+                        
+                        addLog(`Batch processed: ${result.processed} emails, ${result.questionsFound || 0} questions found`);
+                    } else {
+                        addLog(`Batch processing failed: ${response.statusText}`, 'error');
+                    }
+                    
+                    // Small delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                
+                addLog(`Processing complete! Processed ${processed} emails`, 'success');
+                btn.disabled = false;
+                btn.textContent = 'Process Emails';
+                
+                // Refresh status
+                await checkStatus();
+                
+            } catch (error) {
+                addLog(`Processing error: ${error.message}`, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Process Emails';
+            }
+        }
+
+        async function generateFaqs() {
+            const btn = document.getElementById('generateFaqsBtn');
+            btn.disabled = true;
+            btn.innerHTML = 'Generating FAQs... <span class="spinner"></span>';
+            
+            addLog('Generating FAQs from extracted questions...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/faqs/generate`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`FAQ generation failed: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                addLog(`FAQ generation complete! Created ${result.created || 0} FAQs`, 'success');
+                
+                btn.disabled = false;
+                btn.textContent = 'Generate FAQs';
+                
+            } catch (error) {
+                addLog(`FAQ generation error: ${error.message}`, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Generate FAQs';
+            }
+        }
+
+        async function startAutoProcess() {
+            addLog('Starting automatic processing of all emails...', 'success');
+            
+            // First check status
+            await checkStatus();
+            
+            // Then sync if needed
+            const syncedCount = parseInt(document.getElementById('syncedEmails').textContent);
+            if (syncedCount === 0) {
+                await startSync();
+                
+                // Wait for sync to complete
+                await new Promise(resolve => {
+                    const checkSync = setInterval(() => {
+                        if (!syncInterval) {
+                            clearInterval(checkSync);
+                            resolve();
+                        }
+                    }, 1000);
+                });
+            }
+            
+            // Process emails
+            await processEmails();
+            
+            // Generate FAQs
+            await generateFaqs();
+            
+            addLog('Automatic processing complete!', 'success');
+        }
+
+        // Check status on page load
+        window.onload = () => {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>
