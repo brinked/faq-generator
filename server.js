@@ -78,7 +78,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging middleware
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path} - ${req.ip}`);
+  // Enhanced logging for OAuth callbacks
+  if (req.path.includes('/auth/gmail/callback') || req.path.includes('/auth/outlook/callback')) {
+    logger.info(`OAuth callback request: ${req.method} ${req.path}`, {
+      query: req.query,
+      headers: req.headers,
+      ip: req.ip
+    });
+  } else {
+    logger.info(`${req.method} ${req.path} - ${req.ip}`);
+  }
   next();
 });
 
@@ -88,13 +97,24 @@ app.use((req, res, next) => {
   next();
 });
 
-// API Routes
+// API Routes - IMPORTANT: These must be defined before static file serving
 app.use('/api/auth', authRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
+
+// Log any requests to OAuth callback URLs for debugging
+app.use((req, res, next) => {
+  if (req.path === '/api/auth/gmail/callback' || req.path === '/api/auth/outlook/callback') {
+    logger.warn(`OAuth callback reached middleware: ${req.path}`, {
+      query: req.query,
+      method: req.method
+    });
+  }
+  next();
+});
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -151,6 +171,10 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(clientBuildPath)) {
   
   // Serve React app for all non-API routes
   app.get('*', (req, res) => {
+    // Log any unmatched routes for debugging
+    if (req.path.startsWith('/api/')) {
+      logger.warn(`Unmatched API route: ${req.method} ${req.path}`);
+    }
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 } else {
