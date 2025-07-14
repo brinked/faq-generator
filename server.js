@@ -19,6 +19,7 @@ const dashboardRoutes = require('./src/routes/dashboard');
 const exportRoutes = require('./src/routes/export');
 const debugOAuthRoutes = require('./src/routes/debug-oauth');
 const testOAuthCallbackRoutes = require('./src/routes/test-oauth-callback');
+const testDbRoutes = require('./src/routes/test-db');
 const { initializeQueues } = require('./src/services/queueService');
 const { startScheduledJobs } = require('./src/services/schedulerService');
 
