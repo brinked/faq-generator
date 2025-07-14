@@ -172,11 +172,11 @@
 
         <div class="status-card">
             <h3>Actions</h3>
-            <button id="checkStatusBtn" onclick="checkStatus()">Check Current Status</button>
-            <button id="startSyncBtn" onclick="startSync()">Start Email Sync</button>
-            <button id="processEmailsBtn" onclick="processEmails()" disabled>Process Emails</button>
-            <button id="generateFaqsBtn" onclick="generateFaqs()" disabled>Generate FAQs</button>
-            <button id="autoProcessBtn" onclick="startAutoProcess()">Auto Process All</button>
+            <button id="checkStatusBtn">Check Current Status</button>
+            <button id="startSyncBtn">Start Email Sync</button>
+            <button id="processEmailsBtn" disabled>Process Emails</button>
+            <button id="generateFaqsBtn" disabled>Generate FAQs</button>
+            <button id="autoProcessBtn">Auto Process All</button>
         </div>
 
         <div class="status-card">
@@ -209,7 +209,15 @@
             try {
                 // Get accounts
                 const accountsRes = await fetch(`${API_BASE}/accounts`);
-                const accounts = await accountsRes.json();
+                
+                if (!accountsRes.ok) {
+                    throw new Error(`Failed to fetch accounts: ${accountsRes.statusText}`);
+                }
+                
+                const accountsData = await accountsRes.json();
+                
+                // Handle both array response and object with accounts property
+                const accounts = Array.isArray(accountsData) ? accountsData : (accountsData.accounts || []);
                 
                 if (!accounts || accounts.length === 0) {
                     addLog('No email accounts connected', 'error');
