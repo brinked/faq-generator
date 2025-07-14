@@ -97,14 +97,13 @@ class ApiService {
 
   // Email processing
   async startEmailProcessing(accountId) {
-    return this.request('/api/emails/sync', {
+    return this.request(`/api/accounts/${accountId}/sync`, {
       method: 'POST',
-      body: JSON.stringify({ accountId }),
     });
   }
 
   async syncAllEmails() {
-    return this.request('/api/emails/sync-all', {
+    return this.request('/api/dashboard/sync-all', {
       method: 'POST',
     });
   }
