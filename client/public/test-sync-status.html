@@ -76,6 +76,7 @@
         const API_BASE = 'https://faq-generator.onrender.com';
 
         async function makeRequest(endpoint, method = 'GET', body = null) {
+            console.log(`Making ${method} request to: ${API_BASE}${endpoint}`);
             try {
                 const options = {
                     method,
@@ -89,8 +90,12 @@
                     options.body = JSON.stringify(body);
                 }
 
+                console.log('Request options:', options);
                 const response = await fetch(`${API_BASE}${endpoint}`, options);
+                console.log('Response status:', response.status);
+                
                 const data = await response.json();
+                console.log('Response data:', data);
                 
                 if (!response.ok) {
                     throw new Error(data.error || `HTTP ${response.status}`);
@@ -98,6 +103,7 @@
                 
                 return data;
             } catch (error) {
+                console.error('Request error:', error);
                 throw error;
             }
         }
@@ -138,8 +144,11 @@
         }
 
         async function startSync() {
+            console.log('startSync function called');
             const accountId = document.getElementById('sync-account-id').value;
             const resultEl = document.getElementById('sync-result');
+            
+            console.log('Account ID:', accountId);
             
             if (!accountId) {
                 resultEl.innerHTML = '<span class="error">Please enter an account ID</span>';
@@ -148,9 +157,12 @@
             
             try {
                 resultEl.textContent = 'Starting sync...';
+                console.log('About to make sync request for account:', accountId);
                 const data = await makeRequest(`/api/accounts/${accountId}/sync`, 'POST');
+                console.log('Sync response:', data);
                 resultEl.innerHTML = `<span class="success">Sync started!</span>\n${JSON.stringify(data, null, 2)}`;
             } catch (error) {
+                console.error('Sync error:', error);
                 resultEl.innerHTML = `<span class="error">Error: ${error.message}</span>`;
             }
         }
