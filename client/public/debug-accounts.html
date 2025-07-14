@@ -103,9 +103,9 @@
         </div>
         
         <div class="actions">
-            <button onclick="refreshAccounts()">Refresh</button>
-            <button onclick="testGmailConnection()">Test Gmail Connection</button>
-            <button class="danger" onclick="clearAllAccounts()">Clear All Accounts</button>
+            <button id="refreshBtn">Refresh</button>
+            <button id="testConnectionBtn">Test Gmail Connection</button>
+            <button id="clearAllBtn" class="danger">Clear All Accounts</button>
         </div>
         
         <div id="log" class="log"></div>
@@ -188,8 +188,8 @@
                             ${account.refresh_token ? account.refresh_token.substring(0, 50) + '...' : 'No token'}
                         </div>
                         <div style="margin-top: 10px;">
-                            <button onclick="deleteAccount('${account.id}')">Delete This Account</button>
-                            <button onclick="testAccount('${account.id}')">Test Connection</button>
+                            <button class="delete-account-btn" data-account-id="${account.id}">Delete This Account</button>
+                            <button class="test-account-btn" data-account-id="${account.id}">Test Connection</button>
                         </div>
                     </div>
                 `).join('');
@@ -283,8 +283,27 @@
             loadAccounts();
         }
         
-        // Load accounts on page load
-        loadAccounts();
+        // Set up event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load accounts on page load
+            loadAccounts();
+            
+            // Set up button event listeners
+            document.getElementById('refreshBtn').addEventListener('click', refreshAccounts);
+            document.getElementById('testConnectionBtn').addEventListener('click', testGmailConnection);
+            document.getElementById('clearAllBtn').addEventListener('click', clearAllAccounts);
+        });
+        
+        // Set up dynamic button event listeners
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('delete-account-btn')) {
+                const accountId = e.target.getAttribute('data-account-id');
+                deleteAccount(accountId);
+            } else if (e.target.classList.contains('test-account-btn')) {
+                const accountId = e.target.getAttribute('data-account-id');
+                testAccount(accountId);
+            }
+        });
     </script>
 </body>
 </html>
