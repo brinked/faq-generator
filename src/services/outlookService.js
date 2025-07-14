@@ -28,6 +28,10 @@ class OutlookService {
    * Get OAuth2 authorization URL
    */
   getAuthUrl() {
+    logger.info('Generating Outlook auth URL with redirect URI:', {
+      redirectUri: this.redirectUri,
+      clientId: this.msalConfig.auth.clientId ? 'present' : 'missing'
+    });
     const scopes = [
       'https://graph.microsoft.com/Mail.Read',
       'https://graph.microsoft.com/User.Read'

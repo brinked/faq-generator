@@ -48,6 +48,29 @@ router.get('/', (req, res) => {
 });
 
 /**
+ * Debug endpoint to check OAuth configuration
+ */
+router.get('/debug/oauth-config', (req, res) => {
+  const config = {
+    baseUrl: process.env.BASE_URL,
+    corsOrigin: corsOrigin,
+    gmail: {
+      redirectUri: process.env.GMAIL_REDIRECT_URI || `${process.env.BASE_URL}/api/auth/gmail/callback`,
+      hasClientId: !!process.env.GMAIL_CLIENT_ID,
+      hasClientSecret: !!process.env.GMAIL_CLIENT_SECRET
+    },
+    outlook: {
+      redirectUri: process.env.OUTLOOK_REDIRECT_URI || `${process.env.BASE_URL}/api/auth/outlook/callback`,
+      hasClientId: !!process.env.OUTLOOK_CLIENT_ID,
+      hasClientSecret: !!process.env.OUTLOOK_CLIENT_SECRET
+    }
+  };
+  
+  logger.info('OAuth configuration debug:', config);
+  res.json(config);
+});
+
+/**
  * Get Gmail authorization URL
  */
 router.get('/gmail/url', async (req, res) => {

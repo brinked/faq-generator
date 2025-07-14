@@ -38,11 +38,21 @@ class GmailService {
       'https://www.googleapis.com/auth/userinfo.profile'
     ];
 
-    return this.oauth2Client.generateAuthUrl({
+    // Log the redirect URI being used
+    logger.info('Generating Gmail auth URL with redirect URI:', {
+      redirectUri: this.oauth2Client._clientOptions?.redirectUri || 'not set',
+      clientId: this.oauth2Client._clientId ? 'present' : 'missing'
+    });
+
+    const authUrl = this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
       prompt: 'consent'
     });
+
+    logger.info('Generated Gmail auth URL:', authUrl);
+    
+    return authUrl;
   }
 
   /**
