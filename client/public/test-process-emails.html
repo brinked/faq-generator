@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Processing Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            background-color: #fee;
+            color: #c00;
+        }
+        .success {
+            background-color: #efe;
+            color: #060;
+        }
+        h2 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Email Processing Test</h1>
+
+    <div class="container">
+        <h2>1. Get Unprocessed Emails</h2>
+        <button onclick="getUnprocessedEmails()">Get Unprocessed Emails</button>
+        <div id="unprocessed-result" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h2>2. Process Single Email</h2>
+        <input type="text" id="email-id" placeholder="Enter email ID" style="padding: 8px; width: 300px;">
+        <button onclick="processSingleEmail()">Process Email</button>
+        <div id="process-result" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h2>3. Process All Unprocessed Emails</h2>
+        <button onclick="processAllEmails()">Process All Emails</button>
+        <div id="bulk-result" class="result"></div>
+    </div>
+
+    <div class="container">
+        <h2>4. Generate FAQs</h2>
+        <button onclick="generateFAQs()">Generate FAQs from Questions</button>
+        <div id="faq-result" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://faq-generator-web.onrender.com';
+
+        async function makeRequest(endpoint, method = 'GET', body = null) {
+            console.log(`Making ${method} request to: ${API_BASE}${endpoint}`);
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Request error:', error);
+                throw error;
+            }
+        }
+
+        async function getUnprocessedEmails() {
+            const resultEl = document.getElementById('unprocessed-result');
+            try {
+                resultEl.textContent = 'Loading...';
+                
+                // Get emails that haven't been processed
+                const data = await makeRequest('/api/emails?isProcessed=false&limit=100');
+                
+                if (data.emails && data.emails.length > 0) {
+                    resultEl.className = 'result success';
+                    resultEl.textContent = `Found ${data.emails.length} unprocessed emails:\n\n`;
+                    data.emails.forEach(email => {
+                        resultEl.textContent += `ID: ${email.id}\nSubject: ${email.subject}\nFrom: ${email.sender_email}\nDate: ${email.received_at}\n\n`;
+                    });
+                } else {
+                    resultEl.className = 'result';
+                    resultEl.textContent = 'No unprocessed emails found.';
+                }
+            } catch (error) {
+                resultEl.className = 'result error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function processSingleEmail() {
+            const emailId = document.getElementById('email-id').value.trim();
+            const resultEl = document.getElementById('process-result');
+            
+            if (!emailId) {
+                resultEl.className = 'result error';
+                resultEl.textContent = 'Please enter an email ID';
+                return;
+            }
+
+            try {
+                resultEl.textContent = 'Processing...';
+                
+                const data = await makeRequest(`/api/emails/${emailId}/process`, 'POST', {
+                    forceReprocess: true
+                });
+                
+                resultEl.className = 'result success';
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.className = 'result error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function processAllEmails() {
+            const resultEl = document.getElementById('bulk-result');
+            try {
+                resultEl.textContent = 'Getting unprocessed emails...';
+                
+                // First get unprocessed emails
+                const emailData = await makeRequest('/api/emails?isProcessed=false&limit=100');
+                
+                if (!emailData.emails || emailData.emails.length === 0) {
+                    resultEl.className = 'result';
+                    resultEl.textContent = 'No unprocessed emails to process.';
+                    return;
+                }
+
+                const emailIds = emailData.emails.map(e => e.id);
+                resultEl.textContent = `Processing ${emailIds.length} emails...`;
+
+                // Process them in bulk
+                const data = await makeRequest('/api/emails/bulk/process', 'POST', {
+                    emailIds: emailIds,
+                    forceReprocess: false
+                });
+                
+                resultEl.className = 'result success';
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.className = 'result error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function generateFAQs() {
+            const resultEl = document.getElementById('faq-result');
+            try {
+                resultEl.textContent = 'Generating FAQs...';
+                
+                const data = await makeRequest('/api/faqs/generate', 'POST', {
+                    minQuestionCount: 1,  // Lower threshold for testing
+                    forceRegenerate: false
+                });
+                
+                resultEl.className = 'result success';
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.className = 'result error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Load unprocessed emails on page load
+        window.onload = () => {
+            getUnprocessedEmails();
+        };
+    </script>
+</body>
+</html>
