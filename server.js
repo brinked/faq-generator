@@ -17,6 +17,7 @@ const faqRoutes = require('./src/routes/faqs');
 const accountRoutes = require('./src/routes/accounts');
 const dashboardRoutes = require('./src/routes/dashboard');
 const exportRoutes = require('./src/routes/export');
+const debugOAuthRoutes = require('./src/routes/debug-oauth');
 const { initializeQueues } = require('./src/services/queueService');
 const { startScheduledJobs } = require('./src/services/schedulerService');
 
@@ -104,6 +105,12 @@ app.use('/api/faqs', faqRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
+
+// Debug routes (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/debug/oauth', debugOAuthRoutes);
+  logger.info('OAuth debug routes enabled at /api/debug/oauth');
+}
 
 // Log any requests to OAuth callback URLs for debugging
 app.use((req, res, next) => {
