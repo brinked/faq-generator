@@ -515,14 +515,23 @@ router.get('/:accountId/gmail-count', async (req, res) => {
       refresh_token: account.refresh_token
     });
     
-    // Get message count
-    const messages = await gmailService.getMessages({ maxResults: 1 });
-    
-    res.json({
-      success: true,
-      totalMessages: messages.resultSizeEstimate || 0,
-      accountEmail: account.email_address
-    });
+    try {
+      // Get message count
+      const messages = await gmailService.getMessages({ maxResults: 1 });
+      
+      res.json({
+        success: true,
+        totalMessages: messages.resultSizeEstimate || 0,
+        accountEmail: account.email_address
+      });
+    } catch (gmailError) {
+      // If we get an invalid_grant error, mark the account as needing re-authentication
+      if (gmailError.message && gmailError.message.includes('invalid_grant')) {
+        logger.error(`Invalid grant for account ${account.id}, marking as error`);
+        await emailService.updateAccountStatus(account.id, 'error', 'Invalid refresh token - re-authentication required');
+      }
+      throw gmailError;
+    }
     
   } catch (error) {
     logger.error(`Error getting Gmail count for account ${req.params.accountId}:`, error);
