@@ -54,6 +54,12 @@ router.get('/gmail/url', async (req, res) => {
   try {
     const authUrl = gmailService.getAuthUrl();
     
+    logger.info('Generated Gmail auth URL:', {
+      authUrl,
+      baseUrl: process.env.BASE_URL,
+      expectedCallback: `${process.env.BASE_URL}/api/auth/gmail/callback`
+    });
+    
     res.json({
       success: true,
       authUrl,

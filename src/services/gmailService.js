@@ -12,6 +12,13 @@ class GmailService {
     }
     const redirectUri = process.env.GMAIL_REDIRECT_URI || `${baseUrl}/api/auth/gmail/callback`;
     
+    logger.info('Gmail OAuth configuration:', {
+      baseUrl,
+      redirectUri,
+      hasClientId: !!process.env.GMAIL_CLIENT_ID,
+      hasClientSecret: !!process.env.GMAIL_CLIENT_SECRET
+    });
+    
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GMAIL_CLIENT_ID,
       process.env.GMAIL_CLIENT_SECRET,

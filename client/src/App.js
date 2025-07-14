@@ -315,6 +315,8 @@ function App() {
         {/* Debug Info - Remove in production */}
         <div className="mb-4 p-2 bg-gray-100 rounded text-sm text-gray-600">
           Current Step: {currentStep} | Connected Accounts: {connectedAccounts.length} | FAQs: {faqs.length}
+          <br />
+          Processing Status: {processingStatus ? JSON.stringify(processingStatus) : 'null'}
         </div>
 
         {/* Main Content */}
@@ -343,13 +345,19 @@ function App() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <ProcessingStatus
-                status={processingStatus}
-                connectedAccounts={connectedAccounts}
-                onSyncEmails={handleSyncEmails}
-                onContinue={() => setCurrentStep(3)}
-                canContinue={faqs.length > 0}
-              />
+              {connectedAccounts.length > 0 ? (
+                <ProcessingStatus
+                  status={processingStatus}
+                  connectedAccounts={connectedAccounts}
+                  onSyncEmails={handleSyncEmails}
+                  onContinue={() => setCurrentStep(3)}
+                  canContinue={faqs.length > 0}
+                />
+              ) : (
+                <div className="text-center p-8">
+                  <p className="text-gray-600">No connected accounts found. Please go back and connect an email account.</p>
+                </div>
+              )}
             </motion.div>
           )}
 
