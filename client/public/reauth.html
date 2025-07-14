@@ -99,7 +99,10 @@
         async function loadAccountInfo() {
             try {
                 const response = await fetch(`${API_BASE}/accounts`);
-                const accounts = await response.json();
+                const data = await response.json();
+                
+                // Handle both array response and object with accounts property
+                const accounts = Array.isArray(data) ? data : (data.accounts || []);
                 
                 const accountDiv = document.getElementById('accountInfo');
                 

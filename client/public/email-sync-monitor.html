@@ -277,11 +277,11 @@
                     // For now, we'll use processed emails as a proxy for questions
                     // since there's no direct questions endpoint
                     document.getElementById('extractedQuestions').textContent = stats.processed_emails || 0;
-                }
-                
-                // Check if we have questions to generate FAQs from
-                if (stats && stats.processed_emails > 0) {
-                    document.getElementById('generateFaqsBtn').disabled = false;
+                    
+                    // Check if we have questions to generate FAQs from
+                    if (stats && stats.processed_emails > 0) {
+                        document.getElementById('generateFaqsBtn').disabled = false;
+                    }
                 }
                 
                 addLog('Status check complete', 'success');
