@@ -257,24 +257,30 @@
                 document.getElementById('syncedEmails').textContent = syncStatus.totalEmails || 0;
                 
                 // Get unprocessed emails count
-                const unprocessedRes = await fetch(`${API_BASE}/emails/unprocessed`);
-                const unprocessed = await unprocessedRes.json();
-                
-                const processedCount = (syncStatus.totalEmails || 0) - (unprocessed.emails ? unprocessed.emails.length : 0);
-                document.getElementById('processedEmails').textContent = processedCount;
-                
-                // Get questions count
-                const questionsRes = await fetch(`${API_BASE}/emails/questions`);
-                const questions = await questionsRes.json();
-                document.getElementById('extractedQuestions').textContent = questions.length || 0;
-                
-                // Enable/disable buttons
-                if (unprocessed.emails && unprocessed.emails.length > 0) {
-                    document.getElementById('processEmailsBtn').disabled = false;
-                    addLog(`Found ${unprocessed.emails.length} unprocessed emails`, 'success');
+                const unprocessedRes = await fetch(`${API_BASE}/emails/unprocessed/list`);
+                if (unprocessedRes.ok) {
+                    const unprocessed = await unprocessedRes.json();
+                    const processedCount = (syncStatus.totalEmails || 0) - (unprocessed.emails ? unprocessed.emails.length : 0);
+                    document.getElementById('processedEmails').textContent = processedCount;
+                    
+                    // Enable/disable buttons
+                    if (unprocessed.emails && unprocessed.emails.length > 0) {
+                        document.getElementById('processEmailsBtn').disabled = false;
+                        addLog(`Found ${unprocessed.emails.length} unprocessed emails`, 'success');
+                    }
                 }
                 
-                if (questions.length > 0) {
+                // Get questions count from stats
+                const statsRes = await fetch(`${API_BASE}/emails/stats/processing`);
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    // For now, we'll use processed emails as a proxy for questions
+                    // since there's no direct questions endpoint
+                    document.getElementById('extractedQuestions').textContent = stats.processed_emails || 0;
+                }
+                
+                // Check if we have questions to generate FAQs from
+                if (stats && stats.processed_emails > 0) {
                     document.getElementById('generateFaqsBtn').disabled = false;
                 }
                 

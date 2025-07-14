@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Re-authenticate Gmail Account</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .error-box {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #c00;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #0056b3;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .account-info {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .account-info p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Re-authenticate Gmail Account</h1>
+        
+        <div class="error-box">
+            <h3>Authentication Error Detected</h3>
+            <p>Your Gmail authentication has expired or been revoked. This can happen when:</p>
+            <ul style="text-align: left;">
+                <li>The OAuth consent has been revoked</li>
+                <li>The refresh token has expired</li>
+                <li>Google security settings have changed</li>
+                <li>The app's access has been removed from your Google account</li>
+            </ul>
+        </div>
+
+        <div id="accountInfo" class="account-info">
+            <p>Loading account information...</p>
+        </div>
+
+        <div class="info-box">
+            <p>To fix this issue, you need to re-authenticate your Gmail account.</p>
+            <p>Click the button below to connect your Gmail account again.</p>
+        </div>
+
+        <button onclick="connectGmail()">Re-connect Gmail Account</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        
+        async function loadAccountInfo() {
+            try {
+                const response = await fetch(`${API_BASE}/accounts`);
+                const accounts = await response.json();
+                
+                const accountDiv = document.getElementById('accountInfo');
+                
+                if (accounts && accounts.length > 0) {
+                    const account = accounts[0];
+                    accountDiv.innerHTML = `
+                        <h4>Current Account:</h4>
+                        <p><strong>Email:</strong> ${account.email_address}</p>
+                        <p><strong>Status:</strong> <span style="color: #dc3545;">${account.status}</span></p>
+                        <p><strong>Last Sync:</strong> ${account.last_sync_at ? new Date(account.last_sync_at).toLocaleString() : 'Never'}</p>
+                    `;
+                } else {
+                    accountDiv.innerHTML = '<p style="color: #dc3545;">No email account found</p>';
+                }
+            } catch (error) {
+                console.error('Error loading account info:', error);
+                document.getElementById('accountInfo').innerHTML = 
+                    '<p style="color: #dc3545;">Error loading account information</p>';
+            }
+        }
+        
+        function connectGmail() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<p style="color: #007bff;">Opening Gmail authentication window...</p>';
+            
+            // Open OAuth popup
+            const width = 500;
+            const height = 600;
+            const left = (window.innerWidth - width) / 2;
+            const top = (window.innerHeight - height) / 2;
+            
+            const authWindow = window.open(
+                `${API_BASE}/auth/gmail`,
+                'gmail-auth',
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
+            
+            // Check if popup was blocked
+            if (!authWindow || authWindow.closed) {
+                statusDiv.innerHTML = '<p style="color: #dc3545;">Popup was blocked. Please allow popups and try again.</p>';
+                return;
+            }
+            
+            // Poll for window closure
+            const pollTimer = setInterval(() => {
+                if (authWindow.closed) {
+                    clearInterval(pollTimer);
+                    statusDiv.innerHTML = '<p style="color: #28a745;">Authentication complete! Checking status...</p>';
+                    
+                    // Reload account info after a short delay
+                    setTimeout(() => {
+                        loadAccountInfo();
+                        statusDiv.innerHTML += '<p>You can now return to the <a href="/email-sync-monitor.html">Email Sync Monitor</a></p>';
+                    }, 2000);
+                }
+            }, 1000);
+        }
+        
+        // Load account info on page load
+        window.onload = loadAccountInfo;
+    </script>
+</body>
+</html>
