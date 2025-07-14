@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authentication Successful</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f3f4f6;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #10b981;
+            margin-bottom: 1rem;
+        }
+        p {
+            color: #6b7280;
+            margin-bottom: 1rem;
+        }
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✓ Authentication Successful!</h1>
+        <p>Your account has been connected. This window will close automatically...</p>
+        <div class="spinner"></div>
+    </div>
+
+    <script>
+        // Extract parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const success = urlParams.get('success');
+        const error = urlParams.get('error');
+        const account = urlParams.get('account');
+        const provider = success ? success.replace('_connected', '') : null;
+
+        console.log('OAuth callback page loaded:', {
+            success,
+            error,
+            account,
+            provider,
+            opener: window.opener,
+            windowName: window.name
+        });
+
+        // Try to communicate with parent window
+        if (window.opener && !window.opener.closed) {
+            try {
+                // Send message to parent
+                window.opener.postMessage({
+                    type: success ? 'OAUTH_SUCCESS' : 'OAUTH_ERROR',
+                    provider: provider,
+                    account: account,
+                    error: error
+                }, '*'); // Use '*' for now, can be more specific later
+                
+                console.log('Message sent to parent window');
+            } catch (e) {
+                console.error('Failed to send message to parent:', e);
+            }
+        } else {
+            console.log('No parent window found or parent is closed');
+        }
+
+        // Close the window after a delay
+        setTimeout(() => {
+            try {
+                window.close();
+            } catch (e) {
+                console.error('Failed to close window:', e);
+            }
+            
+            // If window.close() doesn't work, show manual close message
+            setTimeout(() => {
+                if (!window.closed) {
+                    document.querySelector('.container').innerHTML = 
+                        '<h1>✓ Authentication Complete</h1>' +
+                        '<p>You can now close this window and return to the application.</p>';
+                }
+            }, 1000);
+        }, 2000);
+    </script>
+</body>
+</html>

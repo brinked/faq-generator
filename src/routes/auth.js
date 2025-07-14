@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 const logger = require('../utils/logger');
 const EmailService = require('../services/emailService');
 const GmailService = require('../services/gmailService');
@@ -166,24 +167,164 @@ router.get('/gmail/callback', async (req, res) => {
     
     logger.info(`Gmail account connected: ${profile.email}`);
     
-    const redirectUrl = `${corsOrigin}/?success=gmail_connected&account=${account.id}`;
-    logger.info('Redirecting after Gmail OAuth success:', {
-      corsOrigin,
-      redirectUrl,
-      accountId: account.id
-    });
-    
-    res.redirect(redirectUrl);
+    // Send success page with account info
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Authentication Successful</title>
+          <style>
+              body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background-color: #f3f4f6;
+              }
+              .container {
+                  text-align: center;
+                  padding: 2rem;
+                  background: white;
+                  border-radius: 8px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              h1 {
+                  color: #10b981;
+                  margin-bottom: 1rem;
+              }
+              p {
+                  color: #6b7280;
+                  margin-bottom: 1rem;
+              }
+              .spinner {
+                  border: 3px solid #f3f4f6;
+                  border-top: 3px solid #3b82f6;
+                  border-radius: 50%;
+                  width: 30px;
+                  height: 30px;
+                  animation: spin 1s linear infinite;
+                  margin: 0 auto;
+              }
+              @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>✓ Authentication Successful!</h1>
+              <p>Your Gmail account has been connected. This window will close automatically...</p>
+              <div class="spinner"></div>
+          </div>
+
+          <script>
+              console.log('OAuth success page loaded');
+              
+              // Try to communicate with parent window
+              if (window.opener && !window.opener.closed) {
+                  try {
+                      // Send message to parent
+                      window.opener.postMessage({
+                          type: 'OAUTH_SUCCESS',
+                          provider: 'gmail',
+                          account: '${account.id}'
+                      }, '${corsOrigin}');
+                      
+                      console.log('Success message sent to parent window');
+                  } catch (e) {
+                      console.error('Failed to send message to parent:', e);
+                  }
+              } else {
+                  console.log('No parent window found or parent is closed');
+              }
+
+              // Close the window after a delay
+              setTimeout(() => {
+                  try {
+                      window.close();
+                  } catch (e) {
+                      console.error('Failed to close window:', e);
+                  }
+                  
+                  // If window.close() doesn't work, show manual close message
+                  setTimeout(() => {
+                      if (!window.closed) {
+                          document.querySelector('.container').innerHTML =
+                              '<h1>✓ Authentication Complete</h1>' +
+                              '<p>You can now close this window and return to the application.</p>';
+                      }
+                  }, 1000);
+              }, 2000);
+          </script>
+      </body>
+      </html>
+    `);
     
   } catch (error) {
     logger.error('Gmail callback error:', error);
-    const errorRedirectUrl = `${corsOrigin}/?error=connection_failed`;
-    logger.error('Redirecting after Gmail OAuth error:', {
-      corsOrigin,
-      errorRedirectUrl,
-      errorMessage: error.message
-    });
-    res.redirect(errorRedirectUrl);
+    // Send error page
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Authentication Failed</title>
+          <style>
+              body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background-color: #f3f4f6;
+              }
+              .container {
+                  text-align: center;
+                  padding: 2rem;
+                  background: white;
+                  border-radius: 8px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              h1 {
+                  color: #ef4444;
+                  margin-bottom: 1rem;
+              }
+              p {
+                  color: #6b7280;
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>Authentication Failed</h1>
+              <p>${error.message || 'Failed to connect your account. Please try again.'}</p>
+              <p>This window will close automatically...</p>
+          </div>
+          <script>
+              if (window.opener) {
+                  window.opener.postMessage({
+                      type: 'OAUTH_ERROR',
+                      error: 'connection_failed',
+                      details: ${JSON.stringify(error.message)}
+                  }, '*');
+              }
+              setTimeout(() => {
+                  window.close();
+                  setTimeout(() => {
+                      if (!window.closed) {
+                          document.querySelector('.container').innerHTML =
+                              '<h1>Authentication Failed</h1>' +
+                              '<p>You can close this window and try again.</p>';
+                      }
+                  }, 1000);
+              }, 3000);
+          </script>
+      </body>
+      </html>
+    `);
   }
 });
 
@@ -263,11 +404,164 @@ router.get('/outlook/callback', async (req, res) => {
     
     logger.info(`Outlook account connected: ${profile.mail || profile.userPrincipalName}`);
     
-    res.redirect(`${corsOrigin}/?success=outlook_connected&account=${account.id}`);
+    // Send success page with account info
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Authentication Successful</title>
+          <style>
+              body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background-color: #f3f4f6;
+              }
+              .container {
+                  text-align: center;
+                  padding: 2rem;
+                  background: white;
+                  border-radius: 8px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              h1 {
+                  color: #10b981;
+                  margin-bottom: 1rem;
+              }
+              p {
+                  color: #6b7280;
+                  margin-bottom: 1rem;
+              }
+              .spinner {
+                  border: 3px solid #f3f4f6;
+                  border-top: 3px solid #3b82f6;
+                  border-radius: 50%;
+                  width: 30px;
+                  height: 30px;
+                  animation: spin 1s linear infinite;
+                  margin: 0 auto;
+              }
+              @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>✓ Authentication Successful!</h1>
+              <p>Your Outlook account has been connected. This window will close automatically...</p>
+              <div class="spinner"></div>
+          </div>
+
+          <script>
+              console.log('OAuth success page loaded');
+              
+              // Try to communicate with parent window
+              if (window.opener && !window.opener.closed) {
+                  try {
+                      // Send message to parent
+                      window.opener.postMessage({
+                          type: 'OAUTH_SUCCESS',
+                          provider: 'outlook',
+                          account: '${account.id}'
+                      }, '${corsOrigin}');
+                      
+                      console.log('Success message sent to parent window');
+                  } catch (e) {
+                      console.error('Failed to send message to parent:', e);
+                  }
+              } else {
+                  console.log('No parent window found or parent is closed');
+              }
+
+              // Close the window after a delay
+              setTimeout(() => {
+                  try {
+                      window.close();
+                  } catch (e) {
+                      console.error('Failed to close window:', e);
+                  }
+                  
+                  // If window.close() doesn't work, show manual close message
+                  setTimeout(() => {
+                      if (!window.closed) {
+                          document.querySelector('.container').innerHTML =
+                              '<h1>✓ Authentication Complete</h1>' +
+                              '<p>You can now close this window and return to the application.</p>';
+                      }
+                  }, 1000);
+              }, 2000);
+          </script>
+      </body>
+      </html>
+    `);
     
   } catch (error) {
     logger.error('Outlook callback error:', error);
-    res.redirect(`${corsOrigin}/?error=connection_failed`);
+    // Send error page
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Authentication Failed</title>
+          <style>
+              body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background-color: #f3f4f6;
+              }
+              .container {
+                  text-align: center;
+                  padding: 2rem;
+                  background: white;
+                  border-radius: 8px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              h1 {
+                  color: #ef4444;
+                  margin-bottom: 1rem;
+              }
+              p {
+                  color: #6b7280;
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>Authentication Failed</h1>
+              <p>${error.message || 'Failed to connect your Outlook account. Please try again.'}</p>
+              <p>This window will close automatically...</p>
+          </div>
+          <script>
+              if (window.opener) {
+                  window.opener.postMessage({
+                      type: 'OAUTH_ERROR',
+                      error: 'connection_failed',
+                      details: ${JSON.stringify(error.message)}
+                  }, '*');
+              }
+              setTimeout(() => {
+                  window.close();
+                  setTimeout(() => {
+                      if (!window.closed) {
+                          document.querySelector('.container').innerHTML =
+                              '<h1>Authentication Failed</h1>' +
+                              '<p>You can close this window and try again.</p>';
+                      }
+                  }, 1000);
+              }, 3000);
+          </script>
+      </body>
+      </html>
+    `);
   }
 });
 
