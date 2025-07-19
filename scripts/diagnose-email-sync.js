@@ -182,8 +182,12 @@ async function diagnoseEmailSync() {
       metricsResult.rows.forEach(metric => {
         console.log(`      • ${metric.metric_name}: ${metric.metric_value} (${metric.created_at})`);
         if (metric.metadata) {
-          const metadata = JSON.parse(metric.metadata);
-          console.log(`        Duration: ${metadata.duration}ms, Accounts: ${metadata.accounts || 0}`);
+          try {
+            const metadata = typeof metric.metadata === 'string' ? JSON.parse(metric.metadata) : metric.metadata;
+            console.log(`        Duration: ${metadata.duration}ms, Accounts: ${metadata.accounts || 0}`);
+          } catch (parseError) {
+            console.log(`        Metadata: ${metric.metadata}`);
+          }
         }
       });
     }
