@@ -26,17 +26,41 @@ async function cleanupAllAccounts() {
     // Delete ALL accounts and related data
     logger.info('\nDeleting all accounts and related data...');
     
-    // Delete all sync logs
-    const syncLogsResult = await db.query('DELETE FROM email_sync_logs');
-    logger.info(`Deleted ${syncLogsResult.rowCount} sync log entries`);
+    // Delete all sync logs (if table exists)
+    try {
+      const syncLogsResult = await db.query('DELETE FROM email_sync_logs');
+      logger.info(`Deleted ${syncLogsResult.rowCount} sync log entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('email_sync_logs table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
     
     // Delete all emails
-    const emailsResult = await db.query('DELETE FROM emails');
-    logger.info(`Deleted ${emailsResult.rowCount} email entries`);
+    try {
+      const emailsResult = await db.query('DELETE FROM emails');
+      logger.info(`Deleted ${emailsResult.rowCount} email entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('emails table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
     
     // Delete all FAQs
-    const faqsResult = await db.query('DELETE FROM faqs');
-    logger.info(`Deleted ${faqsResult.rowCount} FAQ entries`);
+    try {
+      const faqsResult = await db.query('DELETE FROM faqs');
+      logger.info(`Deleted ${faqsResult.rowCount} FAQ entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('faqs table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
     
     // Delete all accounts
     const accountsResult = await db.query('DELETE FROM email_accounts');
