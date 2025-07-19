@@ -7,7 +7,7 @@ class FAQService {
   constructor() {
     this.aiService = new AIService();
     this.similarityService = new SimilarityService();
-    this.autoPublishThreshold = parseInt(process.env.FAQ_AUTO_PUBLISH_THRESHOLD) || 5;
+    this.autoPublishThreshold = parseInt(process.env.FAQ_AUTO_PUBLISH_THRESHOLD) || 1;
   }
 
   /**
@@ -391,6 +391,7 @@ class FAQService {
         queryParams.push(category);
       }
 
+      // Only filter by published if explicitly requested
       if (published !== null) {
         whereConditions.push(`is_published = $${paramIndex++}`);
         queryParams.push(published);
@@ -398,7 +399,7 @@ class FAQService {
 
       if (search) {
         whereConditions.push(`(
-          to_tsvector('english', title || ' ' || representative_question || ' ' || consolidated_answer) 
+          to_tsvector('english', title || ' ' || representative_question || ' ' || consolidated_answer)
           @@ plainto_tsquery('english', $${paramIndex++})
         )`);
         queryParams.push(search);
@@ -406,15 +407,24 @@ class FAQService {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      // Main query
+      // Main query - transform data to match frontend expectations
       const query = `
-        SELECT 
-          fg.*,
+        SELECT
+          fg.id,
+          fg.title,
+          fg.representative_question as question,
+          fg.consolidated_answer as answer,
+          fg.category,
+          fg.frequency_score as frequency,
+          fg.is_published as published,
+          fg.created_at,
+          fg.updated_at,
           COUNT(qg.question_id) as actual_question_count
         FROM faq_groups fg
         LEFT JOIN question_groups qg ON fg.id = qg.group_id
         ${whereClause}
-        GROUP BY fg.id
+        GROUP BY fg.id, fg.title, fg.representative_question, fg.consolidated_answer,
+                 fg.category, fg.frequency_score, fg.is_published, fg.created_at, fg.updated_at
         ORDER BY ${sortBy} ${sortOrder}
         LIMIT $${paramIndex++} OFFSET $${paramIndex++}
       `;
@@ -434,8 +444,20 @@ class FAQService {
       const countResult = await db.query(countQuery, queryParams.slice(0, -2));
       const total = parseInt(countResult.rows[0].total);
 
+      // Transform data to match frontend expectations
+      const transformedFAQs = result.rows.map(faq => ({
+        id: faq.id,
+        question: faq.question,
+        answer: faq.answer,
+        category: faq.category,
+        frequency: Math.round(faq.frequency || 0),
+        published: faq.published,
+        created_at: faq.created_at,
+        updated_at: faq.updated_at
+      }));
+
       return {
-        faqs: result.rows,
+        faqs: transformedFAQs,
         pagination: {
           page,
           limit,
@@ -555,6 +577,37 @@ class FAQService {
 
     } catch (error) {
       logger.error(`Error deleting FAQ ${faqId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Publish all unpublished FAQs
+   */
+  async publishAllFAQs() {
+    try {
+      // Get current counts
+      const totalResult = await db.query('SELECT COUNT(*) as count FROM faq_groups');
+      const unpublishedResult = await db.query('SELECT COUNT(*) as count FROM faq_groups WHERE is_published = false OR is_published IS NULL');
+
+      // Update all unpublished FAQs to be published
+      const updateResult = await db.query(`
+        UPDATE faq_groups
+        SET is_published = true, updated_at = NOW()
+        WHERE is_published = false OR is_published IS NULL
+        RETURNING id, title
+      `);
+
+      logger.info(`Published ${updateResult.rowCount} FAQs`);
+
+      return {
+        publishedCount: updateResult.rowCount,
+        totalFAQs: parseInt(totalResult.rows[0].count),
+        publishedFAQs: updateResult.rows
+      };
+
+    } catch (error) {
+      logger.error('Error publishing all FAQs:', error);
       throw error;
     }
   }

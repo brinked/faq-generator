@@ -13,6 +13,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
   const [editForm, setEditForm] = useState({ question: '', answer: '' });
   const [isExporting, setIsExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   // Get unique categories from FAQs
   const categories = useMemo(() => {
@@ -127,6 +128,20 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
     }
   };
 
+  const handlePublishFAQs = async () => {
+    setPublishing(true);
+    try {
+      const result = await apiService.publishAllFAQs();
+      toast.success(`Published ${result.publishedCount} FAQs successfully!`);
+      onRefreshFAQs();
+    } catch (error) {
+      console.error('Failed to publish FAQs:', error);
+      toast.error('Failed to publish FAQs');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       <motion.div
@@ -178,6 +193,19 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                 </svg>
               )}
               <span>Refresh</span>
+            </button>
+
+            <button
+              onClick={handlePublishFAQs}
+              disabled={publishing}
+              className="btn-primary flex items-center space-x-2"
+            >
+              {publishing ? <ButtonSpinner /> : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span>Publish FAQs</span>
             </button>
             
             <div className="relative">

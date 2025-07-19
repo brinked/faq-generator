@@ -49,6 +49,32 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * Publish all unpublished FAQs
+ */
+router.post('/publish-all', async (req, res) => {
+  try {
+    logger.info('Publishing all unpublished FAQs...');
+
+    // Update all unpublished FAQs to be published
+    const result = await faqService.publishAllFAQs();
+
+    res.json({
+      success: true,
+      message: `Published ${result.publishedCount} FAQs`,
+      publishedCount: result.publishedCount,
+      totalFAQs: result.totalFAQs
+    });
+
+  } catch (error) {
+    logger.error('Error publishing FAQs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to publish FAQs'
+    });
+  }
+});
+
+/**
  * Get FAQ by ID
  */
 router.get('/:faqId', async (req, res) => {
