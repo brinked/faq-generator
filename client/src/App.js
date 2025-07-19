@@ -11,6 +11,7 @@ import EmailConnectionWizard from './components/EmailConnectionWizard';
 import ProcessingStatus from './components/ProcessingStatus';
 import FAQDisplay from './components/FAQDisplay';
 import LoadingSpinner from './components/LoadingSpinner';
+import FAQProcessor from './components/FAQProcessor';
 
 // Services
 import { apiService } from './services/apiService';
@@ -360,13 +361,23 @@ function App() {
               transition={{ duration: 0.3 }}
             >
               {connectedAccounts.length > 0 ? (
-                <ProcessingStatus
-                  status={processingStatus}
-                  connectedAccounts={connectedAccounts}
-                  onSyncEmails={handleSyncEmails}
-                  onContinue={() => setCurrentStep(3)}
-                  canContinue={faqs.length > 0}
-                />
+                <div className="space-y-6">
+                  <ProcessingStatus
+                    status={processingStatus}
+                    connectedAccounts={connectedAccounts}
+                    onSyncEmails={handleSyncEmails}
+                    onContinue={() => setCurrentStep(3)}
+                    canContinue={faqs.length > 0}
+                  />
+                  <FAQProcessor
+                    socket={socket}
+                    onProcessingComplete={(result) => {
+                      // Reload FAQs after processing completes
+                      loadFAQs();
+                      toast.success(`Processing complete! Found ${result.questionsFound} questions and created ${result.faqGroupsCreated} FAQ groups.`);
+                    }}
+                  />
+                </div>
               ) : (
                 <div className="text-center p-8">
                   <p className="text-gray-600">No connected accounts found. Please go back and connect an email account.</p>

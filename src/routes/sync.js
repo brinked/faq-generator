@@ -249,4 +249,239 @@ router.post('/refresh/:accountId', async (req, res) => {
   }
 });
 
+/**
+ * Trigger FAQ generation for unprocessed emails
+ */
+router.post('/process-faqs', async (req, res) => {
+  try {
+    const { limit = 100, accountId = null } = req.body;
+    
+    logger.info('FAQ processing triggered via API', { limit, accountId });
+    
+    // Import services here to avoid circular dependencies
+    const EmailService = require('../services/emailService');
+    const AIService = require('../services/aiService');
+    const FAQService = require('../services/faqService');
+    const db = require('../config/database');
+    
+    const emailService = new EmailService();
+    const aiService = new AIService();
+    const faqService = new FAQService();
+    
+    // Get unprocessed emails
+    let whereClause = 'WHERE e.is_processed = false';
+    let queryParams = [];
+    let paramIndex = 1;
+    
+    if (accountId) {
+      whereClause += ` AND e.account_id = $${paramIndex++}`;
+      queryParams.push(accountId);
+    }
+    
+    const query = `
+      SELECT e.*, ea.email_address, ea.provider
+      FROM emails e
+      JOIN email_accounts ea ON e.account_id = ea.id
+      ${whereClause}
+      ORDER BY e.received_at DESC
+      LIMIT $${paramIndex}
+    `;
+    queryParams.push(limit);
+    
+    const emailsResult = await db.query(query, queryParams);
+    const emails = emailsResult.rows;
+    
+    if (emails.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No unprocessed emails found',
+        processed: 0,
+        questionsFound: 0
+      });
+    }
+    
+    // Start processing in background
+    const processingPromise = processEmailsForFAQs(emails, aiService, emailService, faqService, req.io);
+    
+    // Don't wait for completion, return immediately
+    res.json({
+      success: true,
+      message: `Started processing ${emails.length} emails`,
+      emailCount: emails.length,
+      note: 'Processing is running in background. Check status for progress.'
+    });
+    
+    // Handle processing completion/failure in background
+    processingPromise
+      .then(result => {
+        logger.info('FAQ processing completed via API', result);
+        if (req.io) {
+          req.io.emit('faq_processing_complete', result);
+        }
+      })
+      .catch(error => {
+        logger.error('FAQ processing failed via API', error);
+        if (req.io) {
+          req.io.emit('faq_processing_error', { error: error.message });
+        }
+      });
+    
+  } catch (error) {
+    logger.error('Error triggering FAQ processing:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to trigger FAQ processing'
+    });
+  }
+});
+
+/**
+ * Get FAQ processing status
+ */
+router.get('/faq-status', async (req, res) => {
+  try {
+    const db = require('../config/database');
+    
+    // Get processing statistics
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_emails,
+        COUNT(*) FILTER (WHERE is_processed = true) as processed_emails,
+        COUNT(*) FILTER (WHERE is_processed = false) as pending_emails
+      FROM emails
+    `;
+    
+    const questionsQuery = `
+      SELECT COUNT(*) as total_questions FROM questions
+    `;
+    
+    const faqsQuery = `
+      SELECT COUNT(*) as total_faqs FROM faq_groups
+    `;
+    
+    const [statsResult, questionsResult, faqsResult] = await Promise.all([
+      db.query(statsQuery),
+      db.query(questionsQuery),
+      db.query(faqsQuery)
+    ]);
+    
+    const stats = statsResult.rows[0];
+    const questionCount = questionsResult.rows[0].total_questions;
+    const faqCount = faqsResult.rows[0].total_faqs;
+    
+    res.json({
+      success: true,
+      status: {
+        total_emails: parseInt(stats.total_emails),
+        processed_emails: parseInt(stats.processed_emails),
+        pending_emails: parseInt(stats.pending_emails),
+        total_questions: parseInt(questionCount),
+        total_faqs: parseInt(faqCount),
+        processing_progress: stats.total_emails > 0 ?
+          Math.round((stats.processed_emails / stats.total_emails) * 100) : 0
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Error getting FAQ processing status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get processing status'
+    });
+  }
+});
+
+/**
+ * Process emails for FAQs (background function)
+ */
+async function processEmailsForFAQs(emails, aiService, emailService, faqService, io) {
+  let processedCount = 0;
+  let questionsFound = 0;
+  let errors = 0;
+  
+  for (let i = 0; i < emails.length; i++) {
+    const email = emails[i];
+    
+    try {
+      // Emit progress update every 5 emails
+      if (io && i % 5 === 0) {
+        io.emit('faq_processing_progress', {
+          current: i + 1,
+          total: emails.length,
+          processed: processedCount,
+          questions: questionsFound,
+          errors: errors,
+          currentEmail: email.subject
+        });
+      }
+      
+      // Detect questions from email using AI
+      const result = await aiService.detectQuestions(
+        email.body_text || email.body_html || '',
+        email.subject || ''
+      );
+      
+      if (result && result.hasQuestions && result.questions && result.questions.length > 0) {
+        // Store questions in database
+        for (const question of result.questions) {
+          try {
+            const db = require('../config/database');
+            const questionQuery = `
+              INSERT INTO questions (
+                email_id, question_text, answer_text, confidence_score,
+                is_customer_question, created_at
+              ) VALUES ($1, $2, $3, $4, $5, NOW())
+              RETURNING id
+            `;
+            
+            await db.query(questionQuery, [
+              email.id,
+              question.question,
+              question.answer || '',
+              question.confidence || 0.8,
+              true
+            ]);
+            
+            questionsFound++;
+          } catch (questionError) {
+            logger.warn(`Failed to store question for email ${email.id}:`, questionError);
+          }
+        }
+      }
+      
+      // Mark email as processed
+      await emailService.markEmailProcessed(email.id, 'completed');
+      processedCount++;
+      
+    } catch (processError) {
+      logger.error(`Error processing email ${email.id}:`, processError);
+      await emailService.markEmailProcessed(email.id, 'failed', processError.message);
+      errors++;
+    }
+  }
+  
+  // Generate FAQ groups
+  let faqResult = { groupsCreated: 0, questionsGrouped: 0 };
+  try {
+    faqResult = await faqService.generateFAQs();
+  } catch (faqError) {
+    logger.error('FAQ generation failed:', faqError);
+  }
+  
+  const result = {
+    processed: processedCount,
+    questionsFound: questionsFound,
+    errors: errors,
+    faqGroupsCreated: faqResult.groupsCreated || 0,
+    questionsGrouped: faqResult.questionsGrouped || 0
+  };
+  
+  // Emit final completion
+  if (io) {
+    io.emit('faq_processing_complete', result);
+  }
+  
+  return result;
+}
+
 module.exports = router;
