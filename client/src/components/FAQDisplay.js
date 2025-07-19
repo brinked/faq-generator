@@ -305,21 +305,56 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
         className="space-y-4"
       >
         {filteredFAQs.length === 0 ? (
-          <div className="card text-center py-12">
-            <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No FAQs Found</h3>
-            <p className="text-gray-600 mb-4">
-              {searchQuery || selectedCategory !== 'all' 
-                ? 'No FAQs match your current filters.' 
-                : 'No FAQs have been generated yet.'}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {searchQuery || selectedCategory !== 'all' ? 'No Matching FAQs' : 'No FAQs Generated Yet'}
+            </h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              {searchQuery || selectedCategory !== 'all'
+                ? 'Try adjusting your search terms or filters to find what you\'re looking for.'
+                : 'Your processed emails will appear here as FAQs. Try processing some emails first or check if FAQs need to be published.'}
             </p>
-            {!searchQuery && selectedCategory === 'all' && (
-              <button onClick={onBackToProcessing} className="btn-primary">
-                Back to Processing
-              </button>
-            )}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              {!searchQuery && selectedCategory === 'all' && (
+                <>
+                  <button onClick={onBackToProcessing} className="btn-primary">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Processing
+                  </button>
+                  <button onClick={handlePublishFAQs} disabled={publishing} className="btn-secondary">
+                    {publishing ? (
+                      <div className="spinner mr-2"></div>
+                    ) : (
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    )}
+                    Publish FAQs
+                  </button>
+                </>
+              )}
+              {(searchQuery || selectedCategory !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('all');
+                  }}
+                  className="btn-secondary"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear Filters
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           filteredFAQs.map((faq, index) => (
@@ -328,99 +363,150 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="faq-item"
+              className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 overflow-hidden"
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  {editingFAQ === faq.id ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Question</label>
-                        <input
-                          type="text"
-                          value={editForm.question}
-                          onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
-                          className="input-field"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Answer</label>
-                        <textarea
-                          value={editForm.answer}
-                          onChange={(e) => setEditForm({ ...editForm, answer: e.target.value })}
-                          rows={4}
-                          className="input-field"
-                        />
-                      </div>
-                      <div className="flex space-x-2">
-                        <button onClick={handleSaveEdit} className="btn-success">Save</button>
-                        <button onClick={() => setEditingFAQ(null)} className="btn-secondary">Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => setExpandedFAQ(expandedFAQ === faq.id ? null : faq.id)}
-                        className="text-left w-full"
-                      >
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2 hover:text-primary-600 transition-colors duration-200">
-                          {faq.question}
-                        </h3>
-                      </button>
-                      
-                      <AnimatePresence>
-                        {expandedFAQ === faq.id && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mt-4"
-                          >
-                            <p className="text-gray-700 leading-relaxed mb-4">{faq.answer}</p>
-                            
-                            <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-gray-200">
-                              <div className="flex items-center space-x-4">
-                                {faq.frequency && (
-                                  <span>Asked {faq.frequency} times</span>
-                                )}
-                                {faq.category && (
-                                  <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs">
-                                    {faq.category}
-                                  </span>
-                                )}
-                              </div>
-                              <span>
-                                {new Date(faq.created_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </>
-                  )}
-                </div>
-
-                {editingFAQ !== faq.id && (
-                  <div className="flex items-center space-x-2 ml-4">
-                    <button
-                      onClick={() => handleEditFAQ(faq)}
-                      className="text-gray-400 hover:text-primary-600 transition-colors duration-200"
-                    >
+              {editingFAQ === faq.id ? (
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Question</label>
+                    <input
+                      type="text"
+                      value={editForm.question}
+                      onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter the question..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Answer</label>
+                    <textarea
+                      value={editForm.answer}
+                      onChange={(e) => setEditForm({ ...editForm, answer: e.target.value })}
+                      rows={4}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="Enter the answer..."
+                    />
+                  </div>
+                  <div className="flex space-x-3 pt-2">
+                    <button onClick={handleSaveEdit} className="btn-success flex items-center space-x-2">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
+                      <span>Save Changes</span>
                     </button>
-                    <button
-                      onClick={() => handleDeleteFAQ(faq.id)}
-                      className="text-gray-400 hover:text-red-600 transition-colors duration-200"
-                    >
+                    <button onClick={() => setEditingFAQ(null)} className="btn-secondary flex items-center space-x-2">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
+                      <span>Cancel</span>
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <>
+                  <div className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <button
+                          onClick={() => setExpandedFAQ(expandedFAQ === faq.id ? null : faq.id)}
+                          className="text-left w-full group"
+                        >
+                          <div className="flex items-start justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors duration-200 pr-4">
+                              {faq.question}
+                            </h3>
+                            <div className="flex-shrink-0 ml-2">
+                              <svg
+                                className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${expandedFAQ === faq.id ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </button>
+                        
+                        {/* Quick preview when collapsed */}
+                        {expandedFAQ !== faq.id && (
+                          <p className="text-gray-600 text-sm mt-2 line-clamp-2">
+                            {faq.answer.length > 120 ? `${faq.answer.substring(0, 120)}...` : faq.answer}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditFAQ(faq);
+                          }}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                          title="Edit FAQ"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFAQ(faq.id);
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                          title="Delete FAQ"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {expandedFAQ === faq.id && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="border-t border-gray-100"
+                      >
+                        <div className="p-6 pt-4">
+                          <div className="prose prose-sm max-w-none">
+                            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{faq.answer}</p>
+                          </div>
+                          
+                          <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              {faq.frequency && (
+                                <div className="flex items-center space-x-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                  </svg>
+                                  <span>Asked {faq.frequency} times</span>
+                                </div>
+                              )}
+                              {faq.category && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {faq.category}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-1 text-sm text-gray-500">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span>{new Date(faq.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
             </motion.div>
           ))
         )}

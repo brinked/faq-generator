@@ -318,20 +318,26 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <Header />
       
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Step Indicator */}
         <div className="mb-8">
           <StepIndicator steps={STEPS} currentStep={currentStep} />
         </div>
 
         {/* Debug Info - Remove in production */}
-        <div className="mb-4 p-2 bg-gray-100 rounded text-sm text-gray-600">
-          Current Step: {currentStep} | Connected Accounts: {connectedAccounts.length} | FAQs: {faqs.length}
-          <br />
-          Processing Status: {processingStatus ? JSON.stringify(processingStatus) : 'null'}
+        <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-sm text-gray-600">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="font-medium">Debug Info:</span>
+            <span>Step: <span className="font-semibold text-blue-600">{currentStep}</span></span>
+            <span>Accounts: <span className="font-semibold text-green-600">{connectedAccounts.length}</span></span>
+            <span>FAQs: <span className="font-semibold text-purple-600">{faqs.length}</span></span>
+            {processingStatus && (
+              <span>Status: <span className="font-semibold text-orange-600">{processingStatus.status}</span></span>
+            )}
+          </div>
         </div>
 
         {/* Main Content */}
@@ -405,36 +411,44 @@ function App() {
         </AnimatePresence>
 
         {/* Navigation */}
-        <div className="mt-8 flex justify-between">
-          <button
-            onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-            disabled={currentStep === 1}
-            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-            </svg>
-            <span>Previous Step</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              const nextStep = Math.min(3, currentStep + 1);
-              console.log('Moving from step', currentStep, 'to step', nextStep);
-              setCurrentStep(nextStep);
-            }}
-            disabled={currentStep === 3 || (currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0)}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-          >
-            <span>
-              {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
-               currentStep === 2 && faqs.length > 0 ? 'View Generated FAQs' :
-               'Next Step'}
-            </span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </button>
+        <div className="mt-12 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <button
+              onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
+              disabled={currentStep === 1}
+              className="w-full sm:w-auto btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+              </svg>
+              <span>Previous Step</span>
+            </button>
+            
+            <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-500">
+              <span>Step {currentStep} of {STEPS.length}</span>
+            </div>
+            
+            <button
+              onClick={() => {
+                const nextStep = Math.min(3, currentStep + 1);
+                console.log('Moving from step', currentStep, 'to step', nextStep);
+                setCurrentStep(nextStep);
+              }}
+              disabled={currentStep === 3 || (currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0)}
+              className="w-full sm:w-auto btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3"
+            >
+              <span>
+                {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
+                 currentStep === 2 && faqs.length > 0 ? 'View Generated FAQs' :
+                 currentStep === 3 ? 'Complete' : 'Next Step'}
+              </span>
+              {currentStep < 3 && (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </main>
 

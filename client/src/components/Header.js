@@ -12,7 +12,7 @@ const Header = () => {
           className="flex items-center justify-between"
         >
           <div className="flex items-center space-x-4">
-            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl">
+            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl">
               <svg
                 className="w-7 h-7 text-white"
                 fill="none"
