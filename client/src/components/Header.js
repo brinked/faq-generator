@@ -3,8 +3,8 @@ import { motion } from 'framer-motion';
 
 const Header = () => {
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-6xl mx-auto px-4 py-6">
+    <header className="glass border-b border-white/20 backdrop-blur-xl sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -12,43 +12,49 @@ const Header = () => {
           className="flex items-center justify-between"
         >
           <div className="flex items-center space-x-4">
-            <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl">
-              <svg
-                className="w-7 h-7 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+            <div className="relative">
+              <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-2xl shadow-lg">
+                <svg
+                  className="w-8 h-8 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white animate-pulse"></div>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
                 FAQ Generator
               </h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 font-medium">
                 AI-powered FAQ generation from your emails
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center space-x-2 text-sm text-gray-500">
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Connected</span>
+          <div className="flex items-center space-x-6">
+            <div className="hidden md:flex items-center space-x-3 px-4 py-2 bg-white/60 rounded-full backdrop-blur-sm border border-white/30">
+              <div className="flex items-center space-x-2">
+                <div className="relative">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <div className="absolute inset-0 w-3 h-3 bg-green-400 rounded-full animate-ping"></div>
+                </div>
+                <span className="text-sm font-medium text-gray-700">System Online</span>
               </div>
             </div>
             
-            <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200">
+            <button className="group p-3 text-gray-500 hover:text-gray-700 transition-all duration-200 bg-white/60 hover:bg-white/80 rounded-xl backdrop-blur-sm border border-white/30 hover:shadow-lg focus-ring">
               <svg
-                className="w-5 h-5"
+                className="w-5 h-5 transition-transform group-hover:rotate-90"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

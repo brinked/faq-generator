@@ -318,24 +318,37 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <Header />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Step Indicator */}
-        <div className="mb-8">
+        <div className="mb-8 animate-fade-in-up">
           <StepIndicator steps={STEPS} currentStep={currentStep} />
         </div>
 
-        {/* Debug Info - Remove in production */}
-        <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-sm text-gray-600">
+        {/* Debug Info - Enhanced styling */}
+        <div className="mb-6 p-4 glass rounded-xl shadow-lg border border-white/20 text-sm text-gray-700 animate-slide-in-right">
           <div className="flex flex-wrap items-center gap-4">
-            <span className="font-medium">Debug Info:</span>
-            <span>Step: <span className="font-semibold text-blue-600">{currentStep}</span></span>
-            <span>Accounts: <span className="font-semibold text-green-600">{connectedAccounts.length}</span></span>
-            <span>FAQs: <span className="font-semibold text-purple-600">{faqs.length}</span></span>
+            <span className="font-semibold text-gray-800 flex items-center">
+              <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Debug Info:
+            </span>
+            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
+              Step: {currentStep}
+            </span>
+            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
+              Accounts: {connectedAccounts.length}
+            </span>
+            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full font-medium">
+              FAQs: {faqs.length}
+            </span>
             {processingStatus && (
-              <span>Status: <span className="font-semibold text-orange-600">{processingStatus.status}</span></span>
+              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full font-medium">
+                Status: {processingStatus.status}
+              </span>
             )}
           </div>
         </div>
@@ -410,22 +423,36 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* Navigation */}
-        <div className="mt-12 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        {/* Navigation - Enhanced with glass morphism */}
+        <div className="mt-12 glass rounded-2xl shadow-xl border border-white/30 p-6 backdrop-blur-xl">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <button
               onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
               disabled={currentStep === 1}
-              className="w-full sm:w-auto btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3"
+              className="w-full sm:w-auto group relative overflow-hidden bg-white/80 hover:bg-white text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl btn-hover-lift focus-ring"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
               </svg>
               <span>Previous Step</span>
             </button>
             
-            <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-500">
-              <span>Step {currentStep} of {STEPS.length}</span>
+            <div className="hidden sm:flex items-center space-x-3 px-4 py-2 bg-white/60 rounded-full backdrop-blur-sm">
+              <div className="flex space-x-1">
+                {STEPS.map((step, index) => (
+                  <div
+                    key={step.id}
+                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                      index + 1 <= currentStep
+                        ? 'bg-blue-500 scale-125'
+                        : 'bg-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-medium text-gray-700">
+                Step {currentStep} of {STEPS.length}
+              </span>
             </div>
             
             <button
@@ -435,7 +462,7 @@ function App() {
                 setCurrentStep(nextStep);
               }}
               disabled={currentStep === 3 || (currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0)}
-              className="w-full sm:w-auto btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3"
+              className="w-full sm:w-auto group relative overflow-hidden bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl btn-hover-lift focus-ring"
             >
               <span>
                 {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
@@ -443,7 +470,7 @@ function App() {
                  currentStep === 3 ? 'Complete' : 'Next Step'}
               </span>
               {currentStep < 3 && (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               )}

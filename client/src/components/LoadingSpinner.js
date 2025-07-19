@@ -19,14 +19,14 @@ const LoadingSpinner = ({ size = 'medium', text = '', className = '' }) => {
       <motion.div
         animate={{ rotate: 360 }}
         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        className={`loading-spinner ${sizeClasses[size]}`}
+        className={`${sizeClasses[size]} border-4 border-blue-200 border-t-blue-600 rounded-full`}
       />
       {text && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className={`text-gray-600 ${size === 'small' ? 'text-xs' : size === 'large' ? 'text-base' : 'text-sm'}`}
+          className={`text-gray-600 font-medium ${size === 'small' ? 'text-xs' : size === 'large' ? 'text-lg' : 'text-sm'}`}
         >
           {text}
         </motion.p>
