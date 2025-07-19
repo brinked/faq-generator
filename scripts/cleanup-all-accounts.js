@@ -50,13 +50,73 @@ async function cleanupAllAccounts() {
       }
     }
     
-    // Delete all FAQs
+    // Delete question_groups (junction table first)
     try {
-      const faqsResult = await db.query('DELETE FROM faqs');
-      logger.info(`Deleted ${faqsResult.rowCount} FAQ entries`);
+      const questionGroupsResult = await db.query('DELETE FROM question_groups');
+      logger.info(`Deleted ${questionGroupsResult.rowCount} question-group relationships`);
     } catch (err) {
       if (err.code === '42P01') {
-        logger.info('faqs table does not exist, skipping...');
+        logger.info('question_groups table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
+    
+    // Delete questions
+    try {
+      const questionsResult = await db.query('DELETE FROM questions');
+      logger.info(`Deleted ${questionsResult.rowCount} question entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('questions table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
+    
+    // Delete all FAQ groups (correct table name)
+    try {
+      const faqGroupsResult = await db.query('DELETE FROM faq_groups');
+      logger.info(`Deleted ${faqGroupsResult.rowCount} FAQ group entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('faq_groups table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
+    
+    // Delete processing jobs
+    try {
+      const jobsResult = await db.query('DELETE FROM processing_jobs');
+      logger.info(`Deleted ${jobsResult.rowCount} processing job entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('processing_jobs table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
+    
+    // Delete audit logs
+    try {
+      const auditResult = await db.query('DELETE FROM audit_logs');
+      logger.info(`Deleted ${auditResult.rowCount} audit log entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('audit_logs table does not exist, skipping...');
+      } else {
+        throw err;
+      }
+    }
+    
+    // Delete system metrics
+    try {
+      const metricsResult = await db.query('DELETE FROM system_metrics');
+      logger.info(`Deleted ${metricsResult.rowCount} system metric entries`);
+    } catch (err) {
+      if (err.code === '42P01') {
+        logger.info('system_metrics table does not exist, skipping...');
       } else {
         throw err;
       }
