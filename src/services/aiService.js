@@ -96,7 +96,17 @@ Respond in JSON format:
         max_tokens: 1000
       });
 
-      const result = JSON.parse(response.data.choices[0].message.content);
+      // Clean the response content to handle markdown code blocks
+      let content = response.data.choices[0].message.content.trim();
+      
+      // Remove markdown code block markers if present
+      if (content.startsWith('```json')) {
+        content = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (content.startsWith('```')) {
+        content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      
+      const result = JSON.parse(content);
       
       // Filter questions based on confidence and length
       const minConfidence = parseFloat(process.env.QUESTION_CONFIDENCE_THRESHOLD) || 0.7;
