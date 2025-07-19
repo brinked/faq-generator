@@ -95,14 +95,17 @@ async function manualFAQGeneration() {
       try {
         console.log(`   ${progress} Processing: "${email.subject}"`);
         
-        // Extract questions from email using AI
-        const questions = await aiService.extractQuestions(email.body_text || email.body_html || '');
+        // Detect questions from email using AI
+        const result = await aiService.detectQuestions(
+          email.body_text || email.body_html || '',
+          email.subject || ''
+        );
         
-        if (questions && questions.length > 0) {
-          console.log(`   ${progress} ✅ Found ${questions.length} question(s)`);
+        if (result && result.hasQuestions && result.questions && result.questions.length > 0) {
+          console.log(`   ${progress} ✅ Found ${result.questions.length} question(s) (confidence: ${result.overallConfidence})`);
           
           // Store questions in database
-          for (const question of questions) {
+          for (const question of result.questions) {
             try {
               const questionQuery = `
                 INSERT INTO questions (
@@ -126,7 +129,7 @@ async function manualFAQGeneration() {
             }
           }
         } else {
-          console.log(`   ${progress} ➖ No questions found`);
+          console.log(`   ${progress} ➖ No questions found (${result?.reasoning || 'No analysis available'})`);
         }
         
         // Mark email as processed
