@@ -168,8 +168,8 @@ class EmailService {
       const expiresAt = new Date(Date.now() + (newTokens.expires_in * 1000));
       
       const query = `
-        UPDATE email_accounts 
-        SET access_token = $1, refresh_token = $2, token_expires_at = $3, 
+        UPDATE email_accounts
+        SET access_token = $1, refresh_token = $2, token_expires_at = $3,
             status = 'active', updated_at = NOW()
         WHERE id = $4
         RETURNING *
@@ -187,7 +187,23 @@ class EmailService {
 
     } catch (error) {
       logger.error(`Error refreshing tokens for account ${accountId}:`, error);
-      await this.updateAccountStatus(accountId, 'error', error.message);
+      
+      // Check for invalid_grant or similar OAuth errors
+      const isInvalidGrant = error.message && (
+        error.message.includes('invalid_grant') ||
+        error.message.includes('invalid_token') ||
+        error.message.includes('unauthorized_client') ||
+        error.message.includes('Bad Request')
+      );
+      
+      if (isInvalidGrant) {
+        // Mark account as requiring re-authentication
+        await this.updateAccountStatus(accountId, 'expired', 'OAuth tokens expired - requires re-authentication');
+        logger.warn(`Account ${accountId} marked as expired due to invalid OAuth tokens`);
+      } else {
+        await this.updateAccountStatus(accountId, 'error', error.message);
+      }
+      
       throw error;
     }
   }
@@ -320,7 +336,23 @@ class EmailService {
 
     } catch (error) {
       logger.error(`Email sync failed for account ${accountId}:`, error);
-      await this.updateAccountStatus(accountId, 'error', error.message);
+      
+      // Check for invalid_grant or similar OAuth errors
+      const isInvalidGrant = error.message && (
+        error.message.includes('invalid_grant') ||
+        error.message.includes('invalid_token') ||
+        error.message.includes('unauthorized_client') ||
+        error.message.includes('Bad Request')
+      );
+      
+      if (isInvalidGrant) {
+        // Mark account as requiring re-authentication
+        await this.updateAccountStatus(accountId, 'expired', 'OAuth tokens expired - requires re-authentication');
+        logger.warn(`Account ${accountId} marked as expired due to invalid OAuth tokens during sync`);
+      } else {
+        await this.updateAccountStatus(accountId, 'error', error.message);
+      }
+      
       throw error;
     }
   }
