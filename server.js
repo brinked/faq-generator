@@ -17,6 +17,7 @@ const faqRoutes = require('./src/routes/faqs');
 const accountRoutes = require('./src/routes/accounts');
 const dashboardRoutes = require('./src/routes/dashboard');
 const exportRoutes = require('./src/routes/export');
+const syncRoutes = require('./src/routes/sync');
 const debugOAuthRoutes = require('./src/routes/debug-oauth');
 const testOAuthCallbackRoutes = require('./src/routes/test-oauth-callback');
 const testDbRoutes = require('./src/routes/test-db');
@@ -109,6 +110,7 @@ app.use('/api/faqs', faqRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Test OAuth callback route (temporary for debugging)
 app.use('/api/test/oauth', testOAuthCallbackRoutes);
@@ -194,7 +196,8 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(clientBuildPath)) {
         emails: '/api/emails',
         faqs: '/api/faqs',
         dashboard: '/api/dashboard',
-        export: '/api/export'
+        export: '/api/export',
+        sync: '/api/sync'
       },
       documentation: 'https://github.com/brinked/faq-generator'
     });
