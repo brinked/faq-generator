@@ -384,9 +384,19 @@ router.get('/faq-status', async (req, res) => {
     
   } catch (error) {
     logger.error('Error getting FAQ processing status:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get processing status'
+    
+    // Return safe defaults if database queries fail
+    res.status(200).json({
+      success: true,
+      status: {
+        total_emails: 0,
+        processed_emails: 0,
+        pending_emails: 0,
+        total_questions: 0,
+        total_faqs: 0,
+        processing_progress: 0,
+        error: 'Unable to fetch current status'
+      }
     });
   }
 });
@@ -399,10 +409,34 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
   let questionsFound = 0;
   let errors = 0;
   
+  // Add memory monitoring
+  const startMemory = process.memoryUsage();
+  logger.info(`Starting email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
+  
   for (let i = 0; i < emails.length; i++) {
     const email = emails[i];
     
     try {
+      // Memory check every 10 emails
+      if (i % 10 === 0) {
+        const currentMemory = process.memoryUsage();
+        const memoryUsedMB = Math.round(currentMemory.heapUsed / 1024 / 1024);
+        logger.info(`Processing email ${i + 1}/${emails.length}. Memory: ${memoryUsedMB}MB`);
+        
+        // If memory usage is too high, force garbage collection
+        if (memoryUsedMB > 800) {
+          if (global.gc) {
+            global.gc();
+            logger.info('Forced garbage collection');
+          }
+        }
+        
+        // If memory is critically high, stop processing
+        if (memoryUsedMB > 900) {
+          logger.error('Memory usage too high, stopping email processing');
+          break;
+        }
+      }
       // Emit progress update every 5 emails
       if (io && i % 5 === 0) {
         io.emit('faq_processing_progress', {
@@ -415,11 +449,16 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
         });
       }
       
-      // Detect questions from email using AI
-      const result = await aiService.detectQuestions(
-        email.body_text || email.body_html || '',
-        email.subject || ''
-      );
+      // Detect questions from email using AI with timeout
+      const result = await Promise.race([
+        aiService.detectQuestions(
+          email.body_text || email.body_html || '',
+          email.subject || ''
+        ),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('AI processing timeout')), 30000)
+        )
+      ]);
       
       if (result && result.hasQuestions && result.questions && result.questions.length > 0) {
         // Store questions in database
