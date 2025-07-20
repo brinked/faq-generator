@@ -127,11 +127,15 @@ class ApiService {
     if (filters.search) queryParams.append('search', filters.search);
     if (filters.category) queryParams.append('category', filters.category);
     if (filters.sortBy) queryParams.append('sortBy', filters.sortBy);
-    if (filters.limit) queryParams.append('limit', filters.limit);
+    
+    // Set a high limit to get all FAQs by default, unless specifically limited
+    const limit = filters.limit || 1000;
+    queryParams.append('limit', limit);
+    
     if (filters.offset) queryParams.append('offset', filters.offset);
 
     const queryString = queryParams.toString();
-    const endpoint = queryString ? `/api/faqs?${queryString}` : '/api/faqs';
+    const endpoint = `/api/faqs?${queryString}`;
     
     const response = await this.request(endpoint);
     // The API returns { success: true, faqs: [...], pagination: {...} }

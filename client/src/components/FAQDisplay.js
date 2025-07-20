@@ -14,6 +14,8 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
   const [isExporting, setIsExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // Get unique categories from FAQs
   const categories = useMemo(() => {
@@ -22,9 +24,9 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
   }, [faqs]);
 
   // Filter and sort FAQs
-  const filteredFAQs = useMemo(() => {
+  const { filteredFAQs, totalFilteredFAQs, paginatedFAQs } = useMemo(() => {
     let filtered = faqs.filter(faq => {
-      const matchesSearch = !searchQuery || 
+      const matchesSearch = !searchQuery ||
         faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
         faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -47,8 +49,24 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
       }
     });
 
-    return filtered;
-  }, [faqs, searchQuery, selectedCategory, sortBy]);
+    // Pagination
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginated = filtered.slice(startIndex, endIndex);
+
+    return {
+      filteredFAQs: filtered,
+      totalFilteredFAQs: filtered.length,
+      paginatedFAQs: paginated
+    };
+  }, [faqs, searchQuery, selectedCategory, sortBy, currentPage, itemsPerPage]);
+
+  // Reset to first page when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, sortBy]);
+
+  const totalPages = Math.ceil(totalFilteredFAQs / itemsPerPage);
 
   const handleEditFAQ = (faq) => {
     setEditingFAQ(faq.id);
@@ -168,15 +186,19 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center space-x-6">
             <div className="text-center">
-              <p className="text-2xl font-bold text-primary-600">{faqs.length}</p>
+              <p className="text-2xl font-bold text-blue-600">{faqs.length}</p>
               <p className="text-sm text-gray-600">Total FAQs</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-success-600">{connectedAccounts.length}</p>
+              <p className="text-2xl font-bold text-green-600">{totalFilteredFAQs}</p>
+              <p className="text-sm text-gray-600">Showing</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-purple-600">{connectedAccounts.length}</p>
               <p className="text-sm text-gray-600">Connected Accounts</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-warning-600">{categories.length - 1}</p>
+              <p className="text-2xl font-bold text-orange-600">{categories.length - 1}</p>
               <p className="text-sm text-gray-600">Categories</p>
             </div>
           </div>
@@ -247,7 +269,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
         transition={{ delay: 0.2 }}
         className="card mb-8"
       >
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           {/* Search */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search FAQs</label>
@@ -294,6 +316,22 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               <option value="alphabetical">Alphabetical</option>
             </select>
           </div>
+
+          {/* Items Per Page */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Per Page</label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => setItemsPerPage(Number(e.target.value))}
+              className="input-field"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={totalFilteredFAQs}>All ({totalFilteredFAQs})</option>
+            </select>
+          </div>
         </div>
       </motion.div>
 
@@ -304,7 +342,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
         transition={{ delay: 0.3 }}
         className="space-y-4"
       >
-        {filteredFAQs.length === 0 ? (
+        {totalFilteredFAQs === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -357,7 +395,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
             </div>
           </div>
         ) : (
-          filteredFAQs.map((faq, index) => (
+          paginatedFAQs.map((faq, index) => (
             <motion.div
               key={faq.id}
               initial={{ opacity: 0, y: 20 }}
@@ -512,15 +550,97 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
         )}
       </motion.div>
 
-      {/* Results Summary */}
-      {filteredFAQs.length > 0 && (
+      {/* Pagination Controls */}
+      {totalFilteredFAQs > 0 && totalPages > 1 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="mt-8 glass rounded-xl p-6 backdrop-blur-sm"
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Results Summary */}
+            <div className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalFilteredFAQs)} of {totalFilteredFAQs} FAQs
+            </div>
+            
+            {/* Pagination Buttons */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                First
+              </button>
+              
+              <button
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+              
+              {/* Page Numbers */}
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+              
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Simple Results Summary for single page */}
+      {totalFilteredFAQs > 0 && totalPages <= 1 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
           className="mt-8 text-center text-sm text-gray-500"
         >
-          Showing {filteredFAQs.length} of {faqs.length} FAQs
+          Showing all {totalFilteredFAQs} FAQs
         </motion.div>
       )}
     </div>
