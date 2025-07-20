@@ -22,21 +22,27 @@ router.post('/reset-account/:accountId', async (req, res) => {
     logger.info(`Starting data reset for account ${accountId}`);
 
     await db.transaction(async (client) => {
-      // Delete questions first (due to foreign key constraints)
+      // Delete FAQ group associations first (due to foreign key constraints)
+      const questionGroupsResult = await client.query(`
+        DELETE FROM question_groups
+        WHERE question_id IN (
+          SELECT q.id FROM questions q
+          JOIN emails e ON q.email_id = e.id
+          WHERE e.account_id = $1
+        )
+      `, [accountId]);
+
+      // Delete FAQ groups that are now orphaned
+      const faqGroupsResult = await client.query(`
+        DELETE FROM faq_groups
+        WHERE id NOT IN (SELECT DISTINCT group_id FROM question_groups WHERE group_id IS NOT NULL)
+      `);
+
+      // Delete questions (due to foreign key constraints)
       const questionsResult = await client.query(
         'DELETE FROM questions WHERE email_id IN (SELECT id FROM emails WHERE account_id = $1)',
         [accountId]
       );
-
-      // Delete FAQ group associations
-      await client.query(`
-        DELETE FROM question_groups 
-        WHERE question_id IN (
-          SELECT q.id FROM questions q 
-          JOIN emails e ON q.email_id = e.id 
-          WHERE e.account_id = $1
-        )
-      `, [accountId]);
 
       // Delete emails
       const emailsResult = await client.query(
@@ -57,6 +63,8 @@ router.post('/reset-account/:accountId', async (req, res) => {
       );
 
       logger.info(`Data reset completed for account ${accountId}`, {
+        questionGroupsDeleted: questionGroupsResult.rowCount,
+        faqGroupsDeleted: faqGroupsResult.rowCount,
         questionsDeleted: questionsResult.rowCount,
         emailsDeleted: emailsResult.rowCount,
         jobsDeleted: jobsResult.rowCount
@@ -70,6 +78,8 @@ router.post('/reset-account/:accountId', async (req, res) => {
       resetItems: {
         emails: 'deleted',
         questions: 'deleted',
+        questionGroups: 'deleted',
+        faqGroups: 'deleted',
         processingJobs: 'deleted',
         lastSyncAt: 'reset'
       }
