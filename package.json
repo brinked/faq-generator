@@ -1,6 +1,6 @@
 {
   "name": "faq-generator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "AI-powered FAQ generation system from business emails",
   "main": "server.js",
   "scripts": {
