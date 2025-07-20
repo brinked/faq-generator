@@ -106,57 +106,125 @@ questionProcessingQueue.process('process-account-emails', async (job) => {
     let processed = 0;
     const total = emails.length;
     
-    for (let i = 0; i < emails.length; i++) {
-      const email = emails[i];
+    // Process emails in batches for better performance
+    const batchSize = 5;
+    const totalBatches = Math.ceil(emails.length / batchSize);
+    
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const batchStart = batchIndex * batchSize;
+      const batchEnd = Math.min(batchStart + batchSize, emails.length);
+      const emailBatch = emails.slice(batchStart, batchEnd);
       
       try {
         // Update progress
-        job.progress(Math.round((i / total) * 80));
+        job.progress(Math.round((batchEnd / total) * 80));
         
-        // Mark email as processing
-        await emailService.markEmailProcessed(email.id, 'processing');
-        
-        // Detect questions
-        const detection = await aiService.detectQuestions(
-          email.body_text || '',
-          email.subject || ''
+        // Mark emails as processing
+        await Promise.allSettled(
+          emailBatch.map(email => emailService.markEmailProcessed(email.id, 'processing'))
         );
         
-        if (detection.hasQuestions && detection.questions.length > 0) {
-          // Store questions with embeddings
-          for (let j = 0; j < detection.questions.length; j++) {
-            const question = detection.questions[j];
+        // Detect questions for all emails in batch concurrently
+        const detectionResults = await Promise.allSettled(
+          emailBatch.map(email =>
+            aiService.detectQuestions(
+              (email.body_text || '').substring(0, 10000), // Limit content size
+              email.subject || ''
+            )
+          )
+        );
+        
+        // Collect all questions from successful detections
+        const allQuestions = [];
+        const questionTexts = [];
+        const emailQuestionMap = new Map();
+        
+        for (let i = 0; i < detectionResults.length; i++) {
+          const result = detectionResults[i];
+          const email = emailBatch[i];
+          
+          if (result.status === 'fulfilled' && result.value.hasQuestions) {
+            const questions = result.value.questions || [];
+            emailQuestionMap.set(email.id, questions);
             
-            // Generate embedding
-            const embedding = await aiService.generateEmbedding(question.question);
-            
-            const insertQuery = `
-              INSERT INTO questions (
-                email_id, question_text, answer_text, confidence_score,
-                position_in_email, embedding, is_customer_question, created_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-              ON CONFLICT (email_id, question_text) DO NOTHING
-            `;
-            
-            await db.query(insertQuery, [
-              email.id,
-              question.question,
-              question.answer,
-              question.confidence,
-              j + 1,
-              JSON.stringify(embedding),
-              true
-            ]);
+            questions.forEach((question, index) => {
+              allQuestions.push({
+                email_id: email.id,
+                question_text: question.question,
+                answer_text: question.answer || '',
+                confidence_score: question.confidence || 0.8,
+                position_in_email: index + 1,
+                is_customer_question: true
+              });
+              questionTexts.push(question.question);
+            });
           }
         }
         
-        // Mark as completed
-        await emailService.markEmailProcessed(email.id, 'completed');
-        processed++;
+        // Generate embeddings in batch if we have questions
+        let embeddings = [];
+        if (questionTexts.length > 0) {
+          try {
+            embeddings = await aiService.generateEmbeddingsBatch(questionTexts);
+          } catch (embeddingError) {
+            logger.warn('Batch embedding generation failed, falling back to individual:', embeddingError);
+            // Fallback to individual embedding generation
+            embeddings = await Promise.allSettled(
+              questionTexts.map(text => aiService.generateEmbedding(text))
+            );
+            embeddings = embeddings.map(result =>
+              result.status === 'fulfilled' ? result.value : null
+            );
+          }
+        }
         
-      } catch (emailError) {
-        logger.error(`Error processing email ${email.id}:`, emailError);
-        await emailService.markEmailProcessed(email.id, 'failed', emailError.message);
+        // Insert questions with embeddings in batch
+        if (allQuestions.length > 0) {
+          const values = [];
+          const placeholders = [];
+          
+          allQuestions.forEach((question, index) => {
+            const baseIndex = index * 7;
+            placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7})`);
+            values.push(
+              question.email_id,
+              question.question_text,
+              question.answer_text,
+              question.confidence_score,
+              question.position_in_email,
+              embeddings[index] ? JSON.stringify(embeddings[index]) : null,
+              question.is_customer_question
+            );
+          });
+          
+          const insertQuery = `
+            INSERT INTO questions (
+              email_id, question_text, answer_text, confidence_score,
+              position_in_email, embedding, is_customer_question
+            ) VALUES ${placeholders.join(', ')}
+            ON CONFLICT (email_id, question_text) DO NOTHING
+          `;
+          
+          await db.query(insertQuery, values);
+          logger.info(`Batch inserted ${allQuestions.length} questions with embeddings`);
+        }
+        
+        // Mark emails as completed
+        await Promise.allSettled(
+          emailBatch.map(email => emailService.markEmailProcessed(email.id, 'completed'))
+        );
+        
+        processed += emailBatch.length;
+        
+      } catch (batchError) {
+        logger.error(`Error processing email batch ${batchIndex + 1}:`, batchError);
+        
+        // Mark all emails in failed batch as failed
+        await Promise.allSettled(
+          emailBatch.map(email =>
+            emailService.markEmailProcessed(email.id, 'failed', batchError.message)
+          )
+        );
       }
     }
     

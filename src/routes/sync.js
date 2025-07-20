@@ -402,7 +402,7 @@ router.get('/faq-status', async (req, res) => {
 });
 
 /**
- * Process emails for FAQs (background function)
+ * Process emails for FAQs (background function) - Optimized with batch processing
  */
 async function processEmailsForFAQs(emails, aiService, emailService, faqService, io) {
   let processedCount = 0;
@@ -411,91 +411,109 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
   
   // Add memory monitoring
   const startMemory = process.memoryUsage();
-  logger.info(`Starting email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
+  logger.info(`Starting optimized email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
   
-  for (let i = 0; i < emails.length; i++) {
-    const email = emails[i];
+  // Process emails in batches for better performance
+  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 5;
+  const totalBatches = Math.ceil(emails.length / batchSize);
+  
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    const batchStart = batchIndex * batchSize;
+    const batchEnd = Math.min(batchStart + batchSize, emails.length);
+    const emailBatch = emails.slice(batchStart, batchEnd);
+    
+    logger.info(`Processing batch ${batchIndex + 1}/${totalBatches} (${emailBatch.length} emails)`);
     
     try {
-      // Memory check every 10 emails
-      if (i % 10 === 0) {
+      // Process batch of emails concurrently
+      const batchResults = await Promise.allSettled(
+        emailBatch.map(email => processEmailWithTimeout(email, aiService))
+      );
+      
+      // Collect all questions from successful results
+      const allQuestions = [];
+      const emailUpdates = [];
+      
+      for (let i = 0; i < batchResults.length; i++) {
+        const result = batchResults[i];
+        const email = emailBatch[i];
+        
+        if (result.status === 'fulfilled' && result.value.success) {
+          const { questions } = result.value;
+          
+          // Add email context to questions
+          questions.forEach(question => {
+            allQuestions.push({
+              email_id: email.id,
+              question_text: question.question,
+              answer_text: question.answer || '',
+              confidence_score: question.confidence || 0.8,
+              is_customer_question: true
+            });
+          });
+          
+          emailUpdates.push({ id: email.id, status: 'completed', error: null });
+          processedCount++;
+          questionsFound += questions.length;
+        } else {
+          const errorMsg = result.status === 'rejected' ? result.reason.message : 'Processing failed';
+          emailUpdates.push({ id: email.id, status: 'failed', error: errorMsg });
+          logger.error(`Error processing email ${email.id}:`, errorMsg);
+          errors++;
+        }
+      }
+      
+      // Batch insert questions if any were found
+      if (allQuestions.length > 0) {
+        await batchInsertQuestions(allQuestions);
+      }
+      
+      // Batch update email statuses
+      await batchUpdateEmailStatuses(emailUpdates, emailService);
+      
+      // Memory management and progress reporting
+      if (batchIndex % 2 === 0) { // Every 2 batches
         const currentMemory = process.memoryUsage();
         const memoryUsedMB = Math.round(currentMemory.heapUsed / 1024 / 1024);
-        logger.info(`Processing email ${i + 1}/${emails.length}. Memory: ${memoryUsedMB}MB`);
+        logger.info(`Batch ${batchIndex + 1}/${totalBatches} completed. Memory: ${memoryUsedMB}MB`);
         
-        // If memory usage is too high, force garbage collection
-        if (memoryUsedMB > 800) {
-          if (global.gc) {
-            global.gc();
-            logger.info('Forced garbage collection');
-          }
+        // Force garbage collection if memory usage is high
+        if (memoryUsedMB > 600 && global.gc) {
+          global.gc();
+          logger.info('Forced garbage collection after batch processing');
         }
         
-        // If memory is critically high, stop processing
-        if (memoryUsedMB > 900) {
-          logger.error('Memory usage too high, stopping email processing');
-          break;
-        }
-      }
-      // Emit progress update every 5 emails
-      if (io && i % 5 === 0) {
-        io.emit('faq_processing_progress', {
-          current: i + 1,
-          total: emails.length,
-          processed: processedCount,
-          questions: questionsFound,
-          errors: errors,
-          currentEmail: email.subject
-        });
-      }
-      
-      // Detect questions from email using AI with timeout
-      const result = await Promise.race([
-        aiService.detectQuestions(
-          email.body_text || email.body_html || '',
-          email.subject || ''
-        ),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI processing timeout')), 30000)
-        )
-      ]);
-      
-      if (result && result.hasQuestions && result.questions && result.questions.length > 0) {
-        // Store questions in database
-        for (const question of result.questions) {
-          try {
-            const db = require('../config/database');
-            const questionQuery = `
-              INSERT INTO questions (
-                email_id, question_text, answer_text, confidence_score,
-                is_customer_question, created_at
-              ) VALUES ($1, $2, $3, $4, $5, NOW())
-              RETURNING id
-            `;
-            
-            await db.query(questionQuery, [
-              email.id,
-              question.question,
-              question.answer || '',
-              question.confidence || 0.8,
-              true
-            ]);
-            
-            questionsFound++;
-          } catch (questionError) {
-            logger.warn(`Failed to store question for email ${email.id}:`, questionError);
-          }
+        // Emit progress update
+        if (io) {
+          io.emit('faq_processing_progress', {
+            current: batchEnd,
+            total: emails.length,
+            processed: processedCount,
+            questions: questionsFound,
+            errors: errors,
+            currentBatch: batchIndex + 1,
+            totalBatches: totalBatches
+          });
         }
       }
       
-      // Mark email as processed
-      await emailService.markEmailProcessed(email.id, 'completed');
-      processedCount++;
+      // Small delay between batches to prevent overwhelming the system
+      if (batchIndex < totalBatches - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
-    } catch (processError) {
-      logger.error(`Error processing email ${email.id}:`, processError);
-      await emailService.markEmailProcessed(email.id, 'failed', processError.message);
-      errors++;
+    } catch (batchError) {
+      logger.error(`Error processing batch ${batchIndex + 1}:`, batchError);
+      
+      // Mark all emails in failed batch as failed
+      for (const email of emailBatch) {
+        try {
+          await emailService.markEmailProcessed(email.id, 'failed', batchError.message);
+          errors++;
+        } catch (updateError) {
+          logger.error(`Failed to mark email ${email.id} as failed:`, updateError);
+        }
+      }
     }
   }
   
@@ -521,6 +539,121 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
   }
   
   return result;
+}
+
+/**
+ * Process a single email with timeout - optimized version
+ */
+async function processEmailWithTimeout(email, aiService) {
+  try {
+    // Reduce timeout from 30s to 10s for better performance
+    const result = await Promise.race([
+      aiService.detectQuestions(
+        // Limit email content size to prevent memory issues
+        (email.body_text || email.body_html || '').substring(0, 10000),
+        email.subject || ''
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('AI processing timeout')), 10000)
+      )
+    ]);
+    
+    return {
+      success: true,
+      questions: result && result.hasQuestions ? result.questions : []
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Batch insert questions into database
+ */
+async function batchInsertQuestions(questions) {
+  if (questions.length === 0) return;
+  
+  try {
+    const db = require('../config/database');
+    
+    // Build batch insert query
+    const values = [];
+    const placeholders = [];
+    
+    questions.forEach((question, index) => {
+      const baseIndex = index * 5;
+      placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5})`);
+      values.push(
+        question.email_id,
+        question.question_text,
+        question.answer_text,
+        question.confidence_score,
+        question.is_customer_question
+      );
+    });
+    
+    const query = `
+      INSERT INTO questions (
+        email_id, question_text, answer_text, confidence_score, is_customer_question
+      ) VALUES ${placeholders.join(', ')}
+      ON CONFLICT (email_id, question_text) DO NOTHING
+    `;
+    
+    await db.query(query, values);
+    logger.info(`Batch inserted ${questions.length} questions`);
+    
+  } catch (error) {
+    logger.error('Error in batch insert questions:', error);
+    
+    // Fallback to individual inserts if batch fails
+    for (const question of questions) {
+      try {
+        const db = require('../config/database');
+        await db.query(`
+          INSERT INTO questions (
+            email_id, question_text, answer_text, confidence_score, is_customer_question
+          ) VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (email_id, question_text) DO NOTHING
+        `, [
+          question.email_id,
+          question.question_text,
+          question.answer_text,
+          question.confidence_score,
+          question.is_customer_question
+        ]);
+      } catch (individualError) {
+        logger.warn(`Failed to insert individual question:`, individualError);
+      }
+    }
+  }
+}
+
+/**
+ * Batch update email processing statuses
+ */
+async function batchUpdateEmailStatuses(emailUpdates, emailService) {
+  if (emailUpdates.length === 0) return;
+  
+  try {
+    // Process updates concurrently but with limited concurrency
+    const concurrency = 3;
+    for (let i = 0; i < emailUpdates.length; i += concurrency) {
+      const batch = emailUpdates.slice(i, i + concurrency);
+      await Promise.allSettled(
+        batch.map(update =>
+          emailService.markEmailProcessed(update.id, update.status, update.error)
+        )
+      );
+    }
+    
+    logger.info(`Batch updated ${emailUpdates.length} email statuses`);
+    
+  } catch (error) {
+    logger.error('Error in batch update email statuses:', error);
+  }
 }
 
 module.exports = router;

@@ -91,11 +91,11 @@ const performanceConfig = {
 
   // Email processing optimization
   email: {
-    // Batch processing settings
+    // Batch processing settings - optimized for performance
     batchSize: {
       fetch: 100,
-      process: 50,
-      store: 25
+      process: 5,    // Reduced from 50 to 5 for better concurrency control
+      store: 50      // Increased from 25 to 50 for batch operations
     },
     // Rate limiting for email APIs
     rateLimit: {
@@ -107,22 +107,33 @@ const performanceConfig = {
         requests: 300,
         window: 300000 // 5 minutes
       }
+    },
+    // Content size limits to prevent memory issues
+    contentLimits: {
+      maxBodySize: 10000,    // 10KB max per email body
+      maxSubjectSize: 500    // 500 chars max for subject
     }
   },
 
-  // Memory management
+  // Memory management - increased limits and better GC
   memory: {
     // Garbage collection optimization
     gc: {
-      enabled: process.env.NODE_ENV === 'production',
-      interval: 60000, // 1 minute
-      threshold: 0.8   // 80% memory usage
+      enabled: true,  // Always enabled for better memory management
+      interval: 30000, // 30 seconds (reduced from 60s)
+      threshold: 0.7   // 70% memory usage (reduced from 80%)
     },
-    // Memory limits
+    // Memory limits - significantly increased
     limits: {
-      heapUsed: 400 * 1024 * 1024,    // 400MB
-      heapTotal: 500 * 1024 * 1024,   // 500MB
-      external: 100 * 1024 * 1024     // 100MB
+      heapUsed: 800 * 1024 * 1024,    // 800MB (increased from 400MB)
+      heapTotal: 1024 * 1024 * 1024,  // 1GB (increased from 500MB)
+      external: 200 * 1024 * 1024     // 200MB (increased from 100MB)
+    },
+    // Memory monitoring settings
+    monitoring: {
+      enabled: true,
+      checkInterval: 10000,  // Check every 10 seconds
+      logThreshold: 0.6      // Log when memory usage exceeds 60%
     }
   },
 
@@ -209,19 +220,22 @@ const performanceConfig = {
 // Environment-specific overrides
 if (process.env.NODE_ENV === 'production') {
   // Production optimizations for Render
-  performanceConfig.database.pool.max = 25;
-  performanceConfig.redis.pool.max = 15;
-  performanceConfig.queue.concurrency.emailSync = 6;
-  performanceConfig.queue.concurrency.faqGeneration = 3;
-  performanceConfig.memory.limits.heapUsed = 800 * 1024 * 1024; // 800MB
-  performanceConfig.memory.limits.heapTotal = 1024 * 1024 * 1024; // 1GB
+  performanceConfig.database.pool.max = 30; // Increased from 25
+  performanceConfig.redis.pool.max = 20;    // Increased from 15
+  performanceConfig.queue.concurrency.emailSync = 8;        // Increased from 6
+  performanceConfig.queue.concurrency.faqGeneration = 4;    // Increased from 3
+  performanceConfig.memory.limits.heapUsed = 1200 * 1024 * 1024;  // 1.2GB
+  performanceConfig.memory.limits.heapTotal = 1536 * 1024 * 1024; // 1.5GB
+  performanceConfig.memory.limits.external = 300 * 1024 * 1024;   // 300MB
+  performanceConfig.email.batchSize.process = 8; // Larger batches in production
 } else if (process.env.NODE_ENV === 'development') {
   // Development optimizations
-  performanceConfig.database.pool.max = 5;
-  performanceConfig.redis.pool.max = 3;
-  performanceConfig.queue.concurrency.emailSync = 2;
-  performanceConfig.queue.concurrency.faqGeneration = 1;
+  performanceConfig.database.pool.max = 8;  // Increased from 5
+  performanceConfig.redis.pool.max = 5;     // Increased from 3
+  performanceConfig.queue.concurrency.emailSync = 3;        // Increased from 2
+  performanceConfig.queue.concurrency.faqGeneration = 2;    // Increased from 1
   performanceConfig.monitoring.interval = 60000; // 1 minute
+  performanceConfig.email.batchSize.process = 3; // Smaller batches in dev
 }
 
 // Helper functions for performance optimization
