@@ -85,6 +85,32 @@ router.post('/reset-account/:accountId', async (req, res) => {
 });
 
 /**
+ * Debug: List all accounts in database
+ */
+router.get('/list-accounts', async (req, res) => {
+  try {
+    const query = `
+      SELECT id, email_address, provider, display_name, status, created_at
+      FROM email_accounts
+      ORDER BY created_at DESC
+    `;
+    const result = await db.query(query);
+    
+    res.json({
+      success: true,
+      accounts: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    logger.error('Error listing accounts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list accounts'
+    });
+  }
+});
+
+/**
  * Get account information for admin testing
  */
 router.get('/account-info/:accountId', async (req, res) => {
