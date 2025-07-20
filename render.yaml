@@ -1,4 +1,4 @@
-# Render.com deployment configuration
+# Render.com deployment configuration - Updated with email filtering improvements
 services:
   # Main web service
   - type: web
