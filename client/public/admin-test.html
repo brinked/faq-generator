@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ Generator - Admin Testing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .json-output {
+            background: #1f2937;
+            color: #10b981;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-3xl font-bold text-gray-900 mb-8">FAQ Generator - Admin Testing</h1>
+            
+            <!-- Account ID Input -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">Account Configuration</h2>
+                <div class="flex gap-4 items-end">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Account ID</label>
+                        <input type="text" id="accountId" placeholder="Enter your account ID" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button onclick="loadAccountInfo()" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Load Account Info
+                    </button>
+                </div>
+                <div id="accountInfo" class="mt-4 p-3 bg-gray-50 rounded-md hidden">
+                    <p class="text-sm text-gray-600">Account info will appear here</p>
+                </div>
+            </div>
+
+            <!-- Test Filtering Logic -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">🔍 Test Filtering Logic</h2>
+                <p class="text-gray-600 mb-4">Compare old vs new email filtering without processing emails</p>
+                <button onclick="testFiltering()" 
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                    Test Filtering Logic
+                </button>
+                <div id="filteringResults" class="mt-4 hidden">
+                    <div class="json-output p-4 rounded-md"></div>
+                </div>
+            </div>
+
+            <!-- Get Filtering Statistics -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">📊 Filtering Statistics</h2>
+                <p class="text-gray-600 mb-4">View detailed filtering statistics and sample filtered emails</p>
+                <button onclick="getFilteringStats()" 
+                        class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                    Get Filtering Stats
+                </button>
+                <div id="filteringStats" class="mt-4 hidden">
+                    <div class="json-output p-4 rounded-md"></div>
+                </div>
+            </div>
+
+            <!-- Reset Account Data -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6 border-l-4 border-red-500">
+                <h2 class="text-xl font-semibold mb-4 text-red-700">⚠️ Reset Account Data</h2>
+                <p class="text-gray-600 mb-4">
+                    <strong>Warning:</strong> This will delete all emails, questions, and processing data for the account. 
+                    Use this to test the filtering with fresh data.
+                </p>
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="confirmReset" class="mr-2">
+                        <span class="text-sm">I understand this will delete all data</span>
+                    </label>
+                    <button onclick="resetAccountData()" 
+                            class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+                        Reset Account Data
+                    </button>
+                </div>
+                <div id="resetResults" class="mt-4 hidden">
+                    <div class="json-output p-4 rounded-md"></div>
+                </div>
+            </div>
+
+            <!-- Force Email Sync -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">🔄 Force Email Sync</h2>
+                <p class="text-gray-600 mb-4">Force a fresh email sync to get new data for testing</p>
+                <div class="flex gap-4 items-end">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Max Emails</label>
+                        <input type="number" id="maxEmails" value="100" min="10" max="1000"
+                               class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button onclick="forceSync()" 
+                            class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">
+                        Force Sync
+                    </button>
+                </div>
+                <div id="syncResults" class="mt-4 hidden">
+                    <div class="json-output p-4 rounded-md"></div>
+                </div>
+            </div>
+
+            <!-- Testing Instructions -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <h2 class="text-xl font-semibold mb-4 text-blue-800">📋 Testing Instructions</h2>
+                <ol class="list-decimal list-inside space-y-2 text-blue-700">
+                    <li>Enter your account ID in the field above</li>
+                    <li>Click "Test Filtering Logic" to see the difference between old and new filtering</li>
+                    <li>Click "Get Filtering Stats" to see detailed statistics</li>
+                    <li>If you want to test with fresh data, use "Reset Account Data" (⚠️ destructive)</li>
+                    <li>Use "Force Sync" to pull fresh emails after reset</li>
+                    <li>Process emails normally to see the filtering in action</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        function getAccountId() {
+            const accountId = document.getElementById('accountId').value.trim();
+            if (!accountId) {
+                alert('Please enter an account ID');
+                return null;
+            }
+            return accountId;
+        }
+
+        function showResults(elementId, data) {
+            const element = document.getElementById(elementId);
+            const output = element.querySelector('.json-output');
+            output.textContent = JSON.stringify(data, null, 2);
+            element.classList.remove('hidden');
+        }
+
+        async function loadAccountInfo() {
+            const accountId = getAccountId();
+            if (!accountId) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/accounts/${accountId}`);
+                const data = await response.json();
+                
+                const infoDiv = document.getElementById('accountInfo');
+                infoDiv.innerHTML = `
+                    <p><strong>Email:</strong> ${data.account?.email || 'N/A'}</p>
+                    <p><strong>Provider:</strong> ${data.account?.provider || 'N/A'}</p>
+                    <p><strong>Status:</strong> ${data.account?.status || 'N/A'}</p>
+                `;
+                infoDiv.classList.remove('hidden');
+            } catch (error) {
+                alert('Error loading account info: ' + error.message);
+            }
+        }
+
+        async function testFiltering() {
+            const accountId = getAccountId();
+            if (!accountId) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/test-filtering/${accountId}`);
+                const data = await response.json();
+                showResults('filteringResults', data);
+            } catch (error) {
+                alert('Error testing filtering: ' + error.message);
+            }
+        }
+
+        async function getFilteringStats() {
+            const accountId = getAccountId();
+            if (!accountId) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/filtering-test/${accountId}`);
+                const data = await response.json();
+                showResults('filteringStats', data);
+            } catch (error) {
+                alert('Error getting filtering stats: ' + error.message);
+            }
+        }
+
+        async function resetAccountData() {
+            const accountId = getAccountId();
+            if (!accountId) return;
+
+            const confirmReset = document.getElementById('confirmReset').checked;
+            if (!confirmReset) {
+                alert('Please check the confirmation checkbox');
+                return;
+            }
+
+            if (!confirm('Are you ABSOLUTELY sure you want to delete all data for this account? This cannot be undone!')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/reset-account/${accountId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ confirmReset: true })
+                });
+                const data = await response.json();
+                showResults('resetResults', data);
+            } catch (error) {
+                alert('Error resetting account data: ' + error.message);
+            }
+        }
+
+        async function forceSync() {
+            const accountId = getAccountId();
+            if (!accountId) return;
+
+            const maxEmails = parseInt(document.getElementById('maxEmails').value);
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/force-sync/${accountId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ maxEmails })
+                });
+                const data = await response.json();
+                showResults('syncResults', data);
+            } catch (error) {
+                alert('Error forcing sync: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

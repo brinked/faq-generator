@@ -18,6 +18,7 @@ const accountRoutes = require('./src/routes/accounts');
 const dashboardRoutes = require('./src/routes/dashboard');
 const exportRoutes = require('./src/routes/export');
 const syncRoutes = require('./src/routes/sync');
+const adminRoutes = require('./src/routes/admin');
 const debugOAuthRoutes = require('./src/routes/debug-oauth');
 const testOAuthCallbackRoutes = require('./src/routes/test-oauth-callback');
 const testDbRoutes = require('./src/routes/test-db');
@@ -115,6 +116,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Test OAuth callback route (temporary for debugging)
 app.use('/api/test/oauth', testOAuthCallbackRoutes);
