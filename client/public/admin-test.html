@@ -147,18 +147,27 @@
             if (!accountId) return;
 
             try {
-                const response = await fetch(`${API_BASE}/accounts/${accountId}`);
+                const response = await fetch(`${API_BASE}/admin/account-info/${accountId}`);
                 const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load account info');
+                }
                 
                 const infoDiv = document.getElementById('accountInfo');
                 infoDiv.innerHTML = `
                     <p><strong>Email:</strong> ${data.account?.email || 'N/A'}</p>
                     <p><strong>Provider:</strong> ${data.account?.provider || 'N/A'}</p>
                     <p><strong>Status:</strong> ${data.account?.status || 'N/A'}</p>
+                    <p><strong>Total Emails:</strong> ${data.account?.stats?.totalEmails || 0}</p>
+                    <p><strong>Pending Emails:</strong> ${data.account?.stats?.pendingEmails || 0}</p>
+                    <p><strong>Questions Generated:</strong> ${data.account?.stats?.totalQuestions || 0}</p>
+                    <p><strong>Last Sync:</strong> ${data.account?.lastSyncAt ? new Date(data.account.lastSyncAt).toLocaleString() : 'Never'}</p>
                 `;
                 infoDiv.classList.remove('hidden');
             } catch (error) {
                 alert('Error loading account info: ' + error.message);
+                console.error('Account info error:', error);
             }
         }
 

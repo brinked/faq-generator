@@ -85,6 +85,67 @@ router.post('/reset-account/:accountId', async (req, res) => {
 });
 
 /**
+ * Get account information for admin testing
+ */
+router.get('/account-info/:accountId', async (req, res) => {
+  try {
+    const { accountId } = req.params;
+
+    const query = `
+      SELECT
+        id,
+        email_address,
+        provider,
+        display_name,
+        status,
+        created_at,
+        last_sync_at,
+        (SELECT COUNT(*) FROM emails WHERE account_id = $1) as total_emails,
+        (SELECT COUNT(*) FROM emails WHERE account_id = $1 AND is_processed = false) as pending_emails,
+        (SELECT COUNT(*) FROM questions WHERE email_id IN (SELECT id FROM emails WHERE account_id = $1)) as total_questions
+      FROM email_accounts
+      WHERE id = $1
+    `;
+
+    const result = await db.query(query, [accountId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Account not found'
+      });
+    }
+
+    const account = result.rows[0];
+
+    res.json({
+      success: true,
+      account: {
+        id: account.id,
+        email: account.email_address,
+        provider: account.provider,
+        displayName: account.display_name,
+        status: account.status,
+        createdAt: account.created_at,
+        lastSyncAt: account.last_sync_at,
+        stats: {
+          totalEmails: parseInt(account.total_emails),
+          pendingEmails: parseInt(account.pending_emails),
+          totalQuestions: parseInt(account.total_questions)
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error(`Error getting account info:`, error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get account information'
+    });
+  }
+});
+
+/**
  * Get filtering test statistics - compare before/after filtering
  */
 router.get('/filtering-test/:accountId', async (req, res) => {
