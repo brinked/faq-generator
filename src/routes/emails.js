@@ -553,8 +553,8 @@ router.get('/stats/filtering', async (req, res) => {
       )
       SELECT
         *,
-        ROUND((conversation_emails::float / NULLIF(total_emails, 0)) * 100, 2) as conversation_percentage,
-        ROUND((valid_for_processing::float / NULLIF(pending_emails, 0)) * 100, 2) as valid_processing_percentage
+        CAST(ROUND((conversation_emails::float / NULLIF(total_emails, 0)) * 100, 2) AS NUMERIC(5,2)) as conversation_percentage,
+        CAST(ROUND((valid_for_processing::float / NULLIF(pending_emails, 0)) * 100, 2) AS NUMERIC(5,2)) as valid_processing_percentage
       FROM email_stats
     `;
 

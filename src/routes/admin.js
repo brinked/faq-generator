@@ -136,8 +136,8 @@ router.get('/filtering-test/:accountId', async (req, res) => {
       )
       SELECT 
         *,
-        ROUND((conversation_emails::float / NULLIF(total_emails, 0)) * 100, 2) as conversation_percentage,
-        ROUND((valid_for_processing::float / NULLIF(pending_emails, 0)) * 100, 2) as valid_processing_percentage,
+        CAST(ROUND((conversation_emails::float / NULLIF(total_emails, 0)) * 100, 2) AS NUMERIC(5,2)) as conversation_percentage,
+        CAST(ROUND((valid_for_processing::float / NULLIF(pending_emails, 0)) * 100, 2) AS NUMERIC(5,2)) as valid_processing_percentage,
         (pending_emails - valid_for_processing) as emails_filtered_out,
         CASE 
           WHEN pending_emails > 0 THEN ROUND(((pending_emails - valid_for_processing)::float / pending_emails) * 100, 2)
