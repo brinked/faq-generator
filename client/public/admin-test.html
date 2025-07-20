@@ -30,7 +30,7 @@
                         <input type="text" id="accountId" placeholder="Enter your account ID" 
                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <button onclick="loadAccountInfo()" 
+                    <button id="loadAccountBtn"
                             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                         Load Account Info
                     </button>
@@ -44,7 +44,7 @@
             <div class="bg-white rounded-lg shadow-md p-6 mb-6">
                 <h2 class="text-xl font-semibold mb-4">🔍 Test Filtering Logic</h2>
                 <p class="text-gray-600 mb-4">Compare old vs new email filtering without processing emails</p>
-                <button onclick="testFiltering()" 
+                <button id="testFilteringBtn"
                         class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
                     Test Filtering Logic
                 </button>
@@ -57,7 +57,7 @@
             <div class="bg-white rounded-lg shadow-md p-6 mb-6">
                 <h2 class="text-xl font-semibold mb-4">📊 Filtering Statistics</h2>
                 <p class="text-gray-600 mb-4">View detailed filtering statistics and sample filtered emails</p>
-                <button onclick="getFilteringStats()" 
+                <button id="getFilteringStatsBtn"
                         class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
                     Get Filtering Stats
                 </button>
@@ -78,7 +78,7 @@
                         <input type="checkbox" id="confirmReset" class="mr-2">
                         <span class="text-sm">I understand this will delete all data</span>
                     </label>
-                    <button onclick="resetAccountData()" 
+                    <button id="resetAccountBtn"
                             class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
                         Reset Account Data
                     </button>
@@ -98,7 +98,7 @@
                         <input type="number" id="maxEmails" value="100" min="10" max="1000"
                                class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <button onclick="forceSync()" 
+                    <button id="forceSyncBtn"
                             class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">
                         Force Sync
                     </button>
@@ -246,6 +246,15 @@
                 alert('Error forcing sync: ' + error.message);
             }
         }
+
+        // Add event listeners when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('loadAccountBtn').addEventListener('click', loadAccountInfo);
+            document.getElementById('testFilteringBtn').addEventListener('click', testFiltering);
+            document.getElementById('getFilteringStatsBtn').addEventListener('click', getFilteringStats);
+            document.getElementById('resetAccountBtn').addEventListener('click', resetAccountData);
+            document.getElementById('forceSyncBtn').addEventListener('click', forceSync);
+        });
     </script>
 </body>
 </html>
