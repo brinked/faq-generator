@@ -411,9 +411,71 @@ class EmailService {
   }
 
   /**
-   * Get emails for processing
+   * Get emails for processing - only emails that are part of conversations with replies from connected accounts
    */
   async getEmailsForProcessing(limit = 100, offset = 0) {
+    try {
+      const query = `
+        WITH connected_emails AS (
+          SELECT DISTINCT ea.email_address
+          FROM email_accounts ea
+          WHERE ea.status = 'active'
+        ),
+        conversation_threads AS (
+          SELECT DISTINCT e1.thread_id
+          FROM emails e1
+          JOIN emails e2 ON e1.thread_id = e2.thread_id
+          JOIN connected_emails ce ON e2.sender_email = ce.email_address
+          WHERE e1.thread_id IS NOT NULL
+            AND e1.thread_id != ''
+            AND e1.sender_email != e2.sender_email  -- Different senders in same thread
+        ),
+        valid_emails AS (
+          SELECT e.*, ea.email_address, ea.provider
+          FROM emails e
+          JOIN email_accounts ea ON e.account_id = ea.id
+          WHERE e.is_processed = false
+            AND (
+              -- Email is part of a conversation thread with replies from connected accounts
+              e.thread_id IN (SELECT thread_id FROM conversation_threads)
+              OR
+              -- Email has replies in the same thread from connected accounts
+              EXISTS (
+                SELECT 1 FROM emails reply_email
+                JOIN connected_emails ce ON reply_email.sender_email = ce.email_address
+                WHERE reply_email.thread_id = e.thread_id
+                  AND reply_email.id != e.id
+                  AND reply_email.sent_at > e.sent_at
+              )
+              OR
+              -- Email is a direct reply to an email from a connected account
+              EXISTS (
+                SELECT 1 FROM emails original_email
+                JOIN connected_emails ce ON original_email.sender_email = ce.email_address
+                WHERE original_email.thread_id = e.thread_id
+                  AND original_email.sent_at < e.sent_at
+              )
+            )
+        )
+        SELECT * FROM valid_emails
+        ORDER BY received_at DESC
+        LIMIT $1 OFFSET $2
+      `;
+
+      const result = await db.query(query, [limit, offset]);
+      
+      logger.info(`Found ${result.rows.length} valid emails for processing (with connected account replies)`);
+      return result.rows;
+    } catch (error) {
+      logger.error('Error getting emails for processing:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all unprocessed emails (including those without replies) - for debugging/admin use
+   */
+  async getAllUnprocessedEmails(limit = 100, offset = 0) {
     try {
       const query = `
         SELECT e.*, ea.email_address, ea.provider
@@ -427,7 +489,7 @@ class EmailService {
       const result = await db.query(query, [limit, offset]);
       return result.rows;
     } catch (error) {
-      logger.error('Error getting emails for processing:', error);
+      logger.error('Error getting all unprocessed emails:', error);
       throw error;
     }
   }

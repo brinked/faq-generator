@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner, { LoadingDots } from './LoadingSpinner';
+import EmailFilteringStats from './EmailFilteringStats';
 
 const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue, canContinue }) => {
   const [localStatus, setLocalStatus] = useState(status);
@@ -267,11 +268,21 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
         </AnimatePresence>
       </motion.div>
 
-      {/* Actions */}
+      {/* Email Filtering Statistics */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
+        className="card mb-8"
+      >
+        <EmailFilteringStats connectedAccounts={connectedAccounts} />
+      </motion.div>
+
+      {/* Actions */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
         className="flex flex-col sm:flex-row gap-4"
       >
         <button

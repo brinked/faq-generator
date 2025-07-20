@@ -159,7 +159,7 @@ router.get('/:emailId', async (req, res) => {
 });
 
 /**
- * Process email for question detection
+ * Process email for question detection with conversation context
  */
 router.post('/:emailId/process', async (req, res) => {
   try {
@@ -188,14 +188,28 @@ router.post('/:emailId/process', async (req, res) => {
       });
     }
 
+    // Get conversation thread context if available
+    let threadEmails = [];
+    if (email.thread_id) {
+      const threadQuery = `
+        SELECT id, sender_email, subject, body_text, sent_at
+        FROM emails
+        WHERE thread_id = $1 AND id != $2
+        ORDER BY sent_at ASC
+      `;
+      const threadResult = await db.query(threadQuery, [email.thread_id, emailId]);
+      threadEmails = threadResult.rows;
+    }
+
     // Mark as processing
     await emailService.markEmailProcessed(emailId, 'processing');
 
     try {
-      // Detect questions using AI
+      // Detect questions using AI with conversation context
       const detection = await aiService.detectQuestions(
         email.body_text || '',
-        email.subject || ''
+        email.subject || '',
+        threadEmails
       );
 
       if (detection.hasQuestions && detection.questions.length > 0) {
@@ -218,7 +232,7 @@ router.post('/:emailId/process', async (req, res) => {
           await db.query(insertQuery, [
             emailId,
             question.question,
-            question.answer,
+            question.answer || null,
             question.context || '',
             '',
             question.confidence,
@@ -238,7 +252,8 @@ router.post('/:emailId/process', async (req, res) => {
           emailId,
           questionsDetected: detection.questions.length,
           confidence: detection.overallConfidence,
-          reasoning: detection.reasoning
+          reasoning: detection.reasoning,
+          threadContext: threadEmails.length > 0 ? `Used ${threadEmails.length} thread emails for context` : 'No thread context available'
         }
       });
 
@@ -296,9 +311,23 @@ router.post('/bulk/process', async (req, res) => {
 
         await emailService.markEmailProcessed(emailId, 'processing');
 
+        // Get conversation thread context if available
+        let threadEmails = [];
+        if (email.thread_id) {
+          const threadQuery = `
+            SELECT id, sender_email, subject, body_text, sent_at
+            FROM emails
+            WHERE thread_id = $1 AND id != $2
+            ORDER BY sent_at ASC
+          `;
+          const threadResult = await db.query(threadQuery, [email.thread_id, emailId]);
+          threadEmails = threadResult.rows;
+        }
+
         const detection = await aiService.detectQuestions(
           email.body_text || '',
-          email.subject || ''
+          email.subject || '',
+          threadEmails
         );
 
         if (detection.hasQuestions && detection.questions.length > 0) {
@@ -317,7 +346,7 @@ router.post('/bulk/process', async (req, res) => {
             await db.query(insertQuery, [
               emailId,
               question.question,
-              question.answer,
+              question.answer || null,
               question.confidence,
               i + 1,
               JSON.stringify(embedding),
@@ -458,6 +487,106 @@ router.get('/stats/processing', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get processing statistics'
+    });
+  }
+});
+
+/**
+ * Get email filtering statistics
+ */
+router.get('/stats/filtering', async (req, res) => {
+  try {
+    const { accountId = null } = req.query;
+
+    let whereCondition = '';
+    let queryParams = [];
+    let paramIndex = 1;
+
+    if (accountId) {
+      whereCondition = 'WHERE e.account_id = $1';
+      queryParams.push(accountId);
+      paramIndex++;
+    }
+
+    const query = `
+      WITH connected_emails AS (
+        SELECT DISTINCT ea.email_address
+        FROM email_accounts ea
+        WHERE ea.status = 'active'
+      ),
+      conversation_threads AS (
+        SELECT DISTINCT e1.thread_id
+        FROM emails e1
+        JOIN emails e2 ON e1.thread_id = e2.thread_id
+        JOIN connected_emails ce ON e2.sender_email = ce.email_address
+        WHERE e1.thread_id IS NOT NULL
+          AND e1.thread_id != ''
+          AND e1.sender_email != e2.sender_email
+      ),
+      email_stats AS (
+        SELECT
+          COUNT(*) as total_emails,
+          COUNT(*) FILTER (WHERE e.thread_id IN (SELECT thread_id FROM conversation_threads)) as conversation_emails,
+          COUNT(*) FILTER (WHERE e.thread_id NOT IN (SELECT thread_id FROM conversation_threads) OR e.thread_id IS NULL) as standalone_emails,
+          COUNT(*) FILTER (WHERE e.is_processed = true) as processed_emails,
+          COUNT(*) FILTER (WHERE e.is_processed = false) as pending_emails,
+          COUNT(*) FILTER (WHERE
+            e.is_processed = false AND
+            (e.thread_id IN (SELECT thread_id FROM conversation_threads) OR
+             EXISTS (
+               SELECT 1 FROM emails reply_email
+               JOIN connected_emails ce ON reply_email.sender_email = ce.email_address
+               WHERE reply_email.thread_id = e.thread_id
+                 AND reply_email.id != e.id
+                 AND reply_email.sent_at > e.sent_at
+             ) OR
+             EXISTS (
+               SELECT 1 FROM emails original_email
+               JOIN connected_emails ce ON original_email.sender_email = ce.email_address
+               WHERE original_email.thread_id = e.thread_id
+                 AND original_email.sent_at < e.sent_at
+             ))
+          ) as valid_for_processing
+        FROM emails e
+        JOIN email_accounts ea ON e.account_id = ea.id
+        ${whereCondition}
+      )
+      SELECT
+        *,
+        ROUND((conversation_emails::float / NULLIF(total_emails, 0)) * 100, 2) as conversation_percentage,
+        ROUND((valid_for_processing::float / NULLIF(pending_emails, 0)) * 100, 2) as valid_processing_percentage
+      FROM email_stats
+    `;
+
+    const db = require('../config/database');
+    const result = await db.query(query, queryParams);
+
+    const stats = result.rows[0];
+
+    res.json({
+      success: true,
+      stats: {
+        total_emails: parseInt(stats.total_emails),
+        conversation_emails: parseInt(stats.conversation_emails),
+        standalone_emails: parseInt(stats.standalone_emails),
+        processed_emails: parseInt(stats.processed_emails),
+        pending_emails: parseInt(stats.pending_emails),
+        valid_for_processing: parseInt(stats.valid_for_processing),
+        conversation_percentage: parseFloat(stats.conversation_percentage) || 0,
+        valid_processing_percentage: parseFloat(stats.valid_processing_percentage) || 0,
+        filtering_impact: {
+          emails_filtered_out: parseInt(stats.pending_emails) - parseInt(stats.valid_for_processing),
+          spam_reduction_percentage: stats.pending_emails > 0 ?
+            Math.round(((parseInt(stats.pending_emails) - parseInt(stats.valid_for_processing)) / parseInt(stats.pending_emails)) * 100) : 0
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error getting filtering stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get filtering statistics'
     });
   }
 });

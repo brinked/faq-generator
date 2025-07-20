@@ -30,39 +30,64 @@ class AIService {
   }
 
   /**
-   * Detect if an email contains customer questions using AI
+   * Detect if an email contains customer questions using AI - enhanced for conversation context
    */
-  async detectQuestions(emailText, emailSubject = '') {
+  async detectQuestions(emailText, emailSubject = '', threadEmails = []) {
     try {
       const fullText = `Subject: ${emailSubject}\n\nBody: ${emailText}`;
       
-      // First, do a quick pattern-based check
+      // Enhanced pattern-based check for customer service conversations
       const hasQuestionPatterns = this.questionPatterns.some(pattern => pattern.test(fullText));
       const hasCustomerContext = this.customerContextPatterns.some(pattern => pattern.test(fullText));
       
-      if (!hasQuestionPatterns && !hasCustomerContext) {
+      // Check for conversation indicators
+      const conversationIndicators = [
+        /\b(re:|fwd:|reply|response|follow.?up)\b/gi,
+        /\b(previous|earlier|last|original)\s+(email|message|conversation)\b/gi,
+        /\b(as\s+discussed|as\s+mentioned|per\s+our)\b/gi
+      ];
+      const hasConversationContext = conversationIndicators.some(pattern => pattern.test(fullText));
+      
+      // If no indicators of customer service content, skip
+      if (!hasQuestionPatterns && !hasCustomerContext && !hasConversationContext) {
         return {
           hasQuestions: false,
           questions: [],
           confidence: 0.1,
-          reasoning: 'No question patterns or customer context detected'
+          reasoning: 'No question patterns, customer context, or conversation indicators detected'
         };
       }
 
-      // Use AI for more sophisticated detection
+      // Build conversation context if thread emails are provided
+      let conversationContext = '';
+      if (threadEmails && threadEmails.length > 0) {
+        conversationContext = '\n\nConversation Thread Context:\n';
+        threadEmails.slice(-3).forEach((email, index) => { // Last 3 emails for context
+          conversationContext += `Email ${index + 1} (${email.sender_email}): ${email.subject}\n${email.body_text?.substring(0, 500) || ''}...\n\n`;
+        });
+      }
+
+      // Use AI for more sophisticated detection with conversation context
       const prompt = `
-Analyze the following email and identify any customer questions that would be suitable for a FAQ.
+Analyze the following email and identify any customer questions that would be suitable for a FAQ. This email is part of a customer service conversation.
 
 Email:
 ${fullText}
+${conversationContext}
 
 Instructions:
-1. Identify questions that customers are asking
-2. Extract the exact question text
-3. If there's a corresponding answer in the email, extract that too
-4. Focus on questions that would be commonly asked by other customers
-5. Ignore internal questions, scheduling, or very specific personal requests
-6. Rate your confidence (0-1) for each question
+1. Focus on genuine customer questions that would be commonly asked by other customers
+2. Extract the exact question text as it appears in the email
+3. If there's a corresponding answer in this email or the conversation thread, extract that too
+4. Prioritize questions about products, services, policies, procedures, or common issues
+5. Ignore:
+   - Internal questions between staff
+   - Scheduling or appointment-specific requests
+   - Very personal or account-specific details
+   - Spam or promotional content
+   - Questions already fully answered in the same email
+6. Rate your confidence (0-1) for each question based on its FAQ suitability
+7. Consider the conversation context to better understand the customer's intent
 
 Respond in JSON format:
 {
@@ -70,9 +95,10 @@ Respond in JSON format:
   "questions": [
     {
       "question": "exact question text",
-      "answer": "answer if found in email, or null",
+      "answer": "answer if found in email thread, or null",
       "confidence": 0.0-1.0,
-      "context": "surrounding context for the question"
+      "context": "surrounding context for the question",
+      "category": "suggested category (e.g., billing, technical, general)"
     }
   ],
   "overallConfidence": 0.0-1.0,
@@ -85,7 +111,7 @@ Respond in JSON format:
         messages: [
           {
             role: 'system',
-            content: 'You are an expert at analyzing customer service emails to identify frequently asked questions. Be precise and focus on questions that would be valuable for a FAQ section.'
+            content: 'You are an expert at analyzing customer service email conversations to identify frequently asked questions. Focus on questions that would be valuable for a FAQ section and help other customers with similar issues.'
           },
           {
             role: 'user',
@@ -93,7 +119,7 @@ Respond in JSON format:
           }
         ],
         temperature: 0.1,
-        max_tokens: 1000
+        max_tokens: 1200
       });
 
       // Clean the response content to handle markdown code blocks
