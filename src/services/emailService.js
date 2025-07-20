@@ -165,7 +165,13 @@ class EmailService {
       }
 
       // Update tokens in database
-      const expiresAt = new Date(Date.now() + (newTokens.expires_in * 1000));
+      const expiresIn = newTokens.expires_in || 3600; // Default to 1 hour if not provided
+      const expiresAt = new Date(Date.now() + (expiresIn * 1000));
+      
+      // Validate the date
+      if (isNaN(expiresAt.getTime())) {
+        throw new Error(`Invalid expiration time calculated from expires_in: ${newTokens.expires_in}`);
+      }
       
       const query = `
         UPDATE email_accounts
