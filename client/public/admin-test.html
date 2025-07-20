@@ -27,12 +27,16 @@
                 <div class="flex gap-4 items-end">
                     <div class="flex-1">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Account ID</label>
-                        <input type="text" id="accountId" placeholder="Enter your account ID" 
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="text" id="accountId" placeholder="Loading account ID..."
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" readonly>
                     </div>
                     <button id="loadAccountBtn"
                             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                         Load Account Info
+                    </button>
+                    <button id="refreshAccountBtn"
+                            class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                        Refresh Account ID
                     </button>
                 </div>
                 <div id="accountInfo" class="mt-4 p-3 bg-gray-50 rounded-md hidden">
@@ -247,13 +251,38 @@
             }
         }
 
+        async function fetchAccountId() {
+            try {
+                const response = await fetch(`${API_BASE}/accounts`);
+                const data = await response.json();
+                
+                if (data.success && data.accounts && data.accounts.length > 0) {
+                    const accountId = data.accounts[0].id;
+                    document.getElementById('accountId').value = accountId;
+                    document.getElementById('accountId').placeholder = 'Account ID loaded';
+                    return accountId;
+                } else {
+                    document.getElementById('accountId').placeholder = 'No accounts found';
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error fetching account ID:', error);
+                document.getElementById('accountId').placeholder = 'Error loading account ID';
+                return null;
+            }
+        }
+
         // Add event listeners when the page loads
         document.addEventListener('DOMContentLoaded', function() {
+            // Auto-fetch account ID on page load
+            fetchAccountId();
+            
             document.getElementById('loadAccountBtn').addEventListener('click', loadAccountInfo);
             document.getElementById('testFilteringBtn').addEventListener('click', testFiltering);
             document.getElementById('getFilteringStatsBtn').addEventListener('click', getFilteringStats);
             document.getElementById('resetAccountBtn').addEventListener('click', resetAccountData);
             document.getElementById('forceSyncBtn').addEventListener('click', forceSync);
+            document.getElementById('refreshAccountBtn').addEventListener('click', fetchAccountId);
         });
     </script>
 </body>
