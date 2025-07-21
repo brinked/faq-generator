@@ -268,46 +268,33 @@ router.post('/process-faqs', async (req, res) => {
     const aiService = new AIService();
     const faqService = new FAQService();
     
-    // Get unprocessed emails
-    let whereClause = 'WHERE e.is_processed = false';
-    let queryParams = [];
-    let paramIndex = 1;
+    // Get filtered emails for processing (only valid conversation emails)
+    const emails = await emailService.getEmailsForProcessing(limit, 0);
     
-    if (accountId) {
-      whereClause += ` AND e.account_id = $${paramIndex++}`;
-      queryParams.push(accountId);
-    }
+    // If accountId is specified, filter further
+    const filteredEmails = accountId
+      ? emails.filter(email => email.account_id === accountId)
+      : emails;
     
-    const query = `
-      SELECT e.*, ea.email_address, ea.provider
-      FROM emails e
-      JOIN email_accounts ea ON e.account_id = ea.id
-      ${whereClause}
-      ORDER BY e.received_at DESC
-      LIMIT $${paramIndex}
-    `;
-    queryParams.push(limit);
-    
-    const emailsResult = await db.query(query, queryParams);
-    const emails = emailsResult.rows;
-    
-    if (emails.length === 0) {
+    if (filteredEmails.length === 0) {
       return res.json({
         success: true,
-        message: 'No unprocessed emails found',
+        message: 'No valid emails found for processing (all emails filtered out or already processed)',
         processed: 0,
         questionsFound: 0
       });
     }
     
     // Start processing in background
-    const processingPromise = processEmailsForFAQs(emails, aiService, emailService, faqService, req.io);
+    const processingPromise = processEmailsForFAQs(filteredEmails, aiService, emailService, faqService, req.io);
     
     // Don't wait for completion, return immediately
     res.json({
       success: true,
-      message: `Started processing ${emails.length} emails`,
-      emailCount: emails.length,
+      message: `Started processing ${filteredEmails.length} filtered emails (${emails.length - filteredEmails.length} emails filtered out)`,
+      emailCount: filteredEmails.length,
+      totalEmails: emails.length,
+      filteredOut: emails.length - filteredEmails.length,
       note: 'Processing is running in background. Check status for progress.'
     });
     
