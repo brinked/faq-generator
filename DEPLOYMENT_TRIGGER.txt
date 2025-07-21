@@ -1,0 +1,14 @@
+DEPLOYMENT TRIGGER - Force Render Service Restart
+Timestamp: 2025-07-21 22:43:00 UTC
+Commit: e984d96 - Fix const assignment error in aiService
+
+CRITICAL FIXES APPLIED:
+✅ OpenAI v3 compatibility (fixed constructor error)
+✅ Const assignment error (fixed detectQuestions method)
+✅ Missing database function (update_faq_group_stats)
+✅ Memory optimization for Render 2GB limit
+✅ Health monitoring system
+✅ Enhanced error handling
+
+TRIGGER REASON: Services need restart to apply all fixes
+EXPECTED RESULT: FAQ generator processes beyond 60 emails successfully
