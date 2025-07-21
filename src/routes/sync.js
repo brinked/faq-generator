@@ -323,19 +323,54 @@ router.post('/process-faqs', async (req, res) => {
 });
 
 /**
- * Get FAQ processing status
+ * Get FAQ processing status - uses same filtering logic as statistics
  */
 router.get('/faq-status', async (req, res) => {
   try {
     const db = require('../config/database');
     
-    // Get processing statistics
+    // Get processing statistics using the same filtering logic as the statistics endpoint
     const statsQuery = `
-      SELECT
-        COUNT(*) as total_emails,
-        COUNT(*) FILTER (WHERE is_processed = true) as processed_emails,
-        COUNT(*) FILTER (WHERE is_processed = false) as pending_emails
-      FROM emails
+      WITH connected_emails AS (
+        SELECT DISTINCT ea.email_address
+        FROM email_accounts ea
+        WHERE ea.status = 'active'
+      ),
+      conversation_threads AS (
+        SELECT DISTINCT e1.thread_id
+        FROM emails e1
+        JOIN emails e2 ON e1.thread_id = e2.thread_id
+        JOIN connected_emails ce ON e2.sender_email = ce.email_address
+        WHERE e1.thread_id IS NOT NULL
+          AND e1.thread_id != ''
+          AND e1.sender_email != e2.sender_email
+      ),
+      email_stats AS (
+        SELECT
+          COUNT(*) as total_emails,
+          COUNT(*) FILTER (WHERE e.is_processed = true) as processed_emails,
+          COUNT(*) FILTER (WHERE e.is_processed = false) as pending_emails,
+          COUNT(*) FILTER (WHERE
+            e.is_processed = false AND
+            (e.thread_id IN (SELECT thread_id FROM conversation_threads) OR
+             EXISTS (
+               SELECT 1 FROM emails reply_email
+               JOIN connected_emails ce ON reply_email.sender_email = ce.email_address
+               WHERE reply_email.thread_id = e.thread_id
+                 AND reply_email.id != e.id
+                 AND reply_email.sent_at > e.sent_at
+             ) OR
+             EXISTS (
+               SELECT 1 FROM emails original_email
+               JOIN connected_emails ce ON original_email.sender_email = ce.email_address
+               WHERE original_email.thread_id = e.thread_id
+                 AND original_email.sent_at < e.sent_at
+             ))
+          ) as valid_for_processing
+        FROM emails e
+        JOIN email_accounts ea ON e.account_id = ea.id
+      )
+      SELECT * FROM email_stats
     `;
     
     const questionsQuery = `
@@ -361,7 +396,7 @@ router.get('/faq-status', async (req, res) => {
       status: {
         total_emails: parseInt(stats.total_emails),
         processed_emails: parseInt(stats.processed_emails),
-        pending_emails: parseInt(stats.pending_emails),
+        pending_emails: parseInt(stats.valid_for_processing), // Use filtered pending count
         total_questions: parseInt(questionCount),
         total_faqs: parseInt(faqCount),
         processing_progress: stats.total_emails > 0 ?
