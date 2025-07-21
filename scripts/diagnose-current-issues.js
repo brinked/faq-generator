@@ -53,9 +53,11 @@ async function diagnoseIssues() {
     try {
       const emailCount = await db.query(`
         SELECT COUNT(*) as total_emails,
-               COUNT(CASE WHEN processed_at IS NOT NULL THEN 1 END) as processed_emails,
-               COUNT(CASE WHEN processed_at IS NULL THEN 1 END) as unprocessed_emails
-        FROM emails 
+               COUNT(CASE WHEN is_processed = true THEN 1 END) as processed_emails,
+               COUNT(CASE WHEN is_processed = false THEN 1 END) as unprocessed_emails,
+               COUNT(CASE WHEN processing_status = 'completed' THEN 1 END) as completed_emails,
+               COUNT(CASE WHEN processing_status = 'failed' THEN 1 END) as failed_emails
+        FROM emails
         WHERE created_at > NOW() - INTERVAL '24 hours'
       `);
       
