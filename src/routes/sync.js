@@ -424,7 +424,7 @@ router.get('/faq-status', async (req, res) => {
 });
 
 /**
- * Process emails for FAQs (background function) - Optimized with batch processing
+ * Process emails for FAQs (background function) - Optimized with smaller batches and better error handling
  */
 async function processEmailsForFAQs(emails, aiService, emailService, faqService, io) {
   let processedCount = 0;
@@ -435,8 +435,8 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
   const startMemory = process.memoryUsage();
   logger.info(`Starting optimized email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
   
-  // Process emails in batches for better performance
-  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 5;
+  // Use smaller batch size to prevent memory issues and timeouts
+  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 3; // Reduced from 5 to 3
   const totalBatches = Math.ceil(emails.length / batchSize);
   
   for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -447,10 +447,19 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
     logger.info(`Processing batch ${batchIndex + 1}/${totalBatches} (${emailBatch.length} emails)`);
     
     try {
-      // Process batch of emails concurrently
-      const batchResults = await Promise.allSettled(
-        emailBatch.map(email => processEmailWithTimeout(email, aiService))
-      );
+      // Process emails sequentially instead of concurrently to reduce memory pressure
+      const batchResults = [];
+      for (const email of emailBatch) {
+        try {
+          const result = await processEmailWithTimeout(email, aiService);
+          batchResults.push({ status: 'fulfilled', value: result });
+        } catch (error) {
+          batchResults.push({ status: 'rejected', reason: error });
+        }
+        
+        // Small delay between emails to prevent overwhelming the AI service
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
       // Collect all questions from successful results
       const allQuestions = [];
@@ -515,30 +524,35 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
       // Batch update email statuses
       await batchUpdateEmailStatuses(emailUpdates, emailService);
       
-      // Memory management and progress reporting
-      if (batchIndex % 2 === 0) { // Every 2 batches
-        const currentMemory = process.memoryUsage();
-        const memoryUsedMB = Math.round(currentMemory.heapUsed / 1024 / 1024);
-        logger.info(`Batch ${batchIndex + 1}/${totalBatches} completed. Memory: ${memoryUsedMB}MB`);
-        
-        // Force garbage collection if memory usage is high
-        if (memoryUsedMB > 600 && global.gc) {
-          global.gc();
-          logger.info('Forced garbage collection after batch processing');
-        }
-        
-        // Emit progress update
-        if (io) {
-          io.emit('faq_processing_progress', {
-            current: batchEnd,
-            total: emails.length,
-            processed: processedCount,
-            questions: questionsFound,
-            errors: errors,
-            currentBatch: batchIndex + 1,
-            totalBatches: totalBatches
-          });
-        }
+      // Enhanced memory management and progress reporting
+      const currentMemory = process.memoryUsage();
+      const memoryUsedMB = Math.round(currentMemory.heapUsed / 1024 / 1024);
+      logger.info(`Batch ${batchIndex + 1}/${totalBatches} completed. Memory: ${memoryUsedMB}MB, Processed: ${processedCount}, Questions: ${questionsFound}, Errors: ${errors}`);
+      
+      // Force garbage collection more aggressively to prevent memory issues
+      if (memoryUsedMB > 400 && global.gc) {
+        global.gc();
+        const afterGC = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        logger.info(`Forced garbage collection: ${memoryUsedMB}MB -> ${afterGC}MB`);
+      }
+      
+      // Emit progress update after every batch
+      if (io) {
+        io.emit('faq_processing_progress', {
+          current: batchEnd,
+          total: emails.length,
+          processed: processedCount,
+          questions: questionsFound,
+          errors: errors,
+          currentBatch: batchIndex + 1,
+          totalBatches: totalBatches,
+          memoryUsage: memoryUsedMB
+        });
+      }
+      
+      // Add a longer pause between batches to prevent overwhelming the system
+      if (batchIndex < totalBatches - 1) { // Don't pause after the last batch
+        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms pause between batches
       }
       
       // Small delay between batches to prevent overwhelming the system
@@ -592,15 +606,17 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
  */
 async function processEmailWithTimeout(email, aiService) {
   try {
-    // Reduce timeout from 30s to 10s for better performance
+    // Increase timeout to 15s but add better error handling
+    const timeoutMs = 15000;
+    
     const result = await Promise.race([
       aiService.detectQuestions(
         // Limit email content size to prevent memory issues
-        (email.body_text || email.body_html || '').substring(0, 10000),
-        email.subject || ''
+        (email.body_text || email.body_html || '').substring(0, 8000), // Reduced from 10000
+        (email.subject || '').substring(0, 500) // Limit subject length too
       ),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('AI processing timeout')), 10000)
+        setTimeout(() => reject(new Error('AI processing timeout after 15s')), timeoutMs)
       )
     ]);
     
@@ -609,9 +625,12 @@ async function processEmailWithTimeout(email, aiService) {
       questions: result && result.hasQuestions ? result.questions : []
     };
   } catch (error) {
+    // Log error but don't let it crash the batch
+    logger.error(`Error processing email ${email.id}:`, error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
+      questions: []
     };
   }
 }
