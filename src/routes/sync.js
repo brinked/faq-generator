@@ -463,9 +463,9 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
         }
       }
       
-      // Batch insert questions if any were found
+      // Generate embeddings and batch insert questions if any were found
       if (allQuestions.length > 0) {
-        await batchInsertQuestions(allQuestions);
+        await batchInsertQuestionsWithEmbeddings(allQuestions, aiService);
       }
       
       // Batch update email statuses
@@ -520,7 +520,9 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
   // Generate FAQ groups
   let faqResult = { groupsCreated: 0, questionsGrouped: 0 };
   try {
+    logger.info('Starting FAQ generation process...');
     faqResult = await faqService.generateFAQs();
+    logger.info(`FAQ generation completed: ${faqResult.generated || 0} generated, ${faqResult.updated || 0} updated`);
   } catch (faqError) {
     logger.error('FAQ generation failed:', faqError);
   }
@@ -608,6 +610,84 @@ async function batchInsertQuestions(questions) {
     logger.error('Error in batch insert questions:', error);
     
     // Fallback to individual inserts if batch fails
+    for (const question of questions) {
+      try {
+        const db = require('../config/database');
+        await db.query(`
+          INSERT INTO questions (
+            email_id, question_text, answer_text, confidence_score, is_customer_question
+          ) VALUES ($1, $2, $3, $4, $5)
+        `, [
+          question.email_id,
+          question.question_text,
+          question.answer_text,
+          question.confidence_score,
+          question.is_customer_question
+        ]);
+      } catch (individualError) {
+        logger.warn(`Failed to insert individual question:`, individualError);
+      }
+    }
+  }
+}
+
+/**
+ * Batch insert questions with embeddings
+ */
+async function batchInsertQuestionsWithEmbeddings(questions, aiService) {
+  if (questions.length === 0) return;
+  
+  try {
+    const db = require('../config/database');
+    
+    // Generate embeddings for all questions in batch
+    const questionTexts = questions.map(q => q.question_text);
+    let embeddings = [];
+    
+    try {
+      embeddings = await aiService.generateEmbeddingsBatch(questionTexts);
+      logger.info(`Generated ${embeddings.length} embeddings for questions`);
+    } catch (embeddingError) {
+      logger.warn('Batch embedding generation failed, falling back to individual:', embeddingError);
+      // Fallback to individual embedding generation
+      embeddings = await Promise.allSettled(
+        questionTexts.map(text => aiService.generateEmbedding(text))
+      );
+      embeddings = embeddings.map(result =>
+        result.status === 'fulfilled' ? result.value : null
+      );
+    }
+    
+    // Build batch insert query with embeddings
+    const values = [];
+    const placeholders = [];
+    
+    questions.forEach((question, index) => {
+      const baseIndex = index * 6;
+      placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6})`);
+      values.push(
+        question.email_id,
+        question.question_text,
+        question.answer_text,
+        question.confidence_score,
+        question.is_customer_question,
+        embeddings[index] ? JSON.stringify(embeddings[index]) : null
+      );
+    });
+    
+    const query = `
+      INSERT INTO questions (
+        email_id, question_text, answer_text, confidence_score, is_customer_question, embedding
+      ) VALUES ${placeholders.join(', ')}
+    `;
+    
+    await db.query(query, values);
+    logger.info(`Batch inserted ${questions.length} questions with embeddings`);
+    
+  } catch (error) {
+    logger.error('Error in batch insert questions with embeddings:', error);
+    
+    // Fallback to individual inserts without embeddings
     for (const question of questions) {
       try {
         const db = require('../config/database');
