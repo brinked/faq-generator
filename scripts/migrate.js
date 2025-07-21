@@ -28,14 +28,15 @@ async function runMigration() {
       
       currentStatement += line + '\n';
       
-      // Check if we're entering a function
+      // Check if we're entering a function or DO block
       if (trimmedLine.includes('CREATE OR REPLACE FUNCTION') ||
-          trimmedLine.includes('CREATE FUNCTION')) {
+          trimmedLine.includes('CREATE FUNCTION') ||
+          trimmedLine.includes('DO $$')) {
         inFunction = true;
       }
       
-      // Check if we're ending a function
-      if (inFunction && trimmedLine.includes('$$ LANGUAGE')) {
+      // Check if we're ending a function or DO block
+      if (inFunction && (trimmedLine.includes('$$ LANGUAGE') || trimmedLine.includes('END $$;'))) {
         inFunction = false;
         statements.push(currentStatement.trim());
         currentStatement = '';
