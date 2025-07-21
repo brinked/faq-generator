@@ -127,7 +127,7 @@ Respond in JSON format:
       });
 
       // Use v3 API response format with error handling
-      const content = response.data.choices[0].message.content.trim();
+      let content = response.data.choices[0].message.content.trim();
       
       // Log the raw content for debugging
       logger.debug('Raw AI response content:', content.substring(0, 200) + '...');
