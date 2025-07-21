@@ -599,7 +599,6 @@ async function batchInsertQuestions(questions) {
       INSERT INTO questions (
         email_id, question_text, answer_text, confidence_score, is_customer_question
       ) VALUES ${placeholders.join(', ')}
-      ON CONFLICT (email_id, question_text) DO NOTHING
     `;
     
     await db.query(query, values);
@@ -616,7 +615,6 @@ async function batchInsertQuestions(questions) {
           INSERT INTO questions (
             email_id, question_text, answer_text, confidence_score, is_customer_question
           ) VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (email_id, question_text) DO NOTHING
         `, [
           question.email_id,
           question.question_text,

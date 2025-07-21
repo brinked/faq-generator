@@ -1,13 +1,12 @@
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
 class AIService {
   constructor() {
-    const configuration = new Configuration({
+    this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY
     });
-    this.openai = new OpenAIApi(configuration);
     
     this.embeddingModel = process.env.OPENAI_MODEL || 'text-embedding-3-small';
     this.chatModel = 'gpt-4o-mini';
@@ -232,12 +231,12 @@ Respond in JSON format:
         return JSON.parse(cached);
       }
 
-      const response = await this.openai.createEmbedding({
+      const response = await this.openai.embeddings.create({
         model: this.embeddingModel,
         input: text
       });
 
-      const embedding = response.data.data[0].embedding;
+      const embedding = response.data[0].embedding;
       
       // Cache the embedding for 24 hours
       await redisClient.set(cacheKey, JSON.stringify(embedding), { ttl: 86400 });
@@ -261,12 +260,12 @@ Respond in JSON format:
       for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
         
-        const response = await this.openai.createEmbedding({
+        const response = await this.openai.embeddings.create({
           model: this.embeddingModel,
           input: batch
         });
 
-        embeddings.push(...response.data.data.map(item => item.embedding));
+        embeddings.push(...response.data.map(item => item.embedding));
       }
 
       return embeddings;
