@@ -441,14 +441,36 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
         if (result.status === 'fulfilled' && result.value.success) {
           const { questions } = result.value;
           
-          // Add email context to questions
-          questions.forEach(question => {
+          // Get connected email addresses to filter out business questions
+          const db = require('../config/database');
+          const connectedEmailsQuery = 'SELECT email_address FROM email_accounts WHERE status = $1';
+          const connectedEmailsResult = await db.query(connectedEmailsQuery, ['active']);
+          const connectedEmails = connectedEmailsResult.rows.map(row => row.email_address.toLowerCase());
+          
+          // Filter out questions from connected email accounts (business emails)
+          const customerQuestions = questions.filter(question => {
+            // Check if the email sender is from a connected account
+            const senderEmail = email.sender_email?.toLowerCase() || '';
+            const isFromConnectedAccount = connectedEmails.some(connectedEmail =>
+              senderEmail.includes(connectedEmail.toLowerCase())
+            );
+            
+            // Only include questions from external customers, not from business accounts
+            return !isFromConnectedAccount && question.isFromCustomer !== false;
+          });
+          
+          // Add email context to filtered customer questions
+          customerQuestions.forEach(question => {
             allQuestions.push({
               email_id: email.id,
               question_text: question.question,
               answer_text: question.answer || '',
               confidence_score: question.confidence || 0.8,
-              is_customer_question: true
+              is_customer_question: true,
+              sender_email: email.sender_email,
+              sender_name: email.sender_name,
+              email_subject: email.subject,
+              received_at: email.received_at
             });
           });
           
@@ -663,21 +685,24 @@ async function batchInsertQuestionsWithEmbeddings(questions, aiService) {
     const placeholders = [];
     
     questions.forEach((question, index) => {
-      const baseIndex = index * 6;
-      placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6})`);
+      const baseIndex = index * 9;
+      placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9})`);
       values.push(
         question.email_id,
         question.question_text,
         question.answer_text,
         question.confidence_score,
         question.is_customer_question,
-        embeddings[index] ? JSON.stringify(embeddings[index]) : null
+        embeddings[index] ? JSON.stringify(embeddings[index]) : null,
+        question.sender_email || null,
+        question.sender_name || null,
+        question.email_subject || null
       );
     });
     
     const query = `
       INSERT INTO questions (
-        email_id, question_text, answer_text, confidence_score, is_customer_question, embedding
+        email_id, question_text, answer_text, confidence_score, is_customer_question, embedding, sender_email, sender_name, email_subject
       ) VALUES ${placeholders.join(', ')}
     `;
     

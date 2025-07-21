@@ -16,6 +16,9 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
   const [publishing, setPublishing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [showSourcesModal, setShowSourcesModal] = useState(false);
+  const [selectedFAQSources, setSelectedFAQSources] = useState(null);
+  const [loadingSources, setLoadingSources] = useState(false);
 
   // Get unique categories from FAQs
   const categories = useMemo(() => {
@@ -158,6 +161,28 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
     } finally {
       setPublishing(false);
     }
+  };
+
+  const handleShowSources = async (faq) => {
+    setLoadingSources(true);
+    try {
+      const sources = await apiService.getFAQSources(faq.id);
+      setSelectedFAQSources({
+        faq: faq,
+        sources: sources.sources || []
+      });
+      setShowSourcesModal(true);
+    } catch (error) {
+      console.error('Failed to fetch FAQ sources:', error);
+      toast.error('Failed to load email sources');
+    } finally {
+      setLoadingSources(false);
+    }
+  };
+
+  const handleCloseSourcesModal = () => {
+    setShowSourcesModal(false);
+    setSelectedFAQSources(null);
   };
 
   return (
@@ -519,12 +544,20 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                           <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
                             <div className="flex items-center space-x-4 text-sm text-gray-500">
                               {faq.frequency && (
-                                <div className="flex items-center space-x-1">
+                                <button
+                                  onClick={() => handleShowSources(faq)}
+                                  disabled={loadingSources}
+                                  className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors duration-200"
+                                  title="View email sources for this FAQ"
+                                >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                                   </svg>
                                   <span>Asked {faq.frequency} times</span>
-                                </div>
+                                  {loadingSources && (
+                                    <div className="w-3 h-3 border border-blue-600 border-t-transparent rounded-full animate-spin ml-1"></div>
+                                  )}
+                                </button>
                               )}
                               {faq.category && (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -643,6 +676,146 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
           Showing all {totalFilteredFAQs} FAQs
         </motion.div>
       )}
+
+      {/* Email Sources Modal */}
+      <AnimatePresence>
+        {showSourcesModal && selectedFAQSources && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={handleCloseSourcesModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Email Sources</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Emails that contributed to this FAQ
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleCloseSourcesModal}
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* FAQ Question */}
+              <div className="px-6 py-4 bg-blue-50 border-b border-gray-200">
+                <h4 className="font-medium text-gray-900 mb-2">FAQ Question:</h4>
+                <p className="text-gray-700">{selectedFAQSources.faq.question}</p>
+              </div>
+
+              {/* Modal Body */}
+              <div className="px-6 py-4 max-h-96 overflow-y-auto">
+                {selectedFAQSources.sources.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2M4 13h2m0 0V9a2 2 0 012-2h2m0 0V6a1 1 0 011-1h2a1 1 0 011 1v1m0 0v2a2 2 0 002 2h2m0 0v1" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Email Sources Found</h3>
+                    <p className="text-gray-600">
+                      This FAQ doesn't have any associated email sources in the database.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-medium text-gray-900">
+                        Found {selectedFAQSources.sources.length} email{selectedFAQSources.sources.length !== 1 ? 's' : ''}
+                      </h4>
+                    </div>
+                    
+                    {selectedFAQSources.sources.map((source, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <h5 className="font-medium text-gray-900 truncate">
+                                {source.email_subject || 'No Subject'}
+                              </h5>
+                            </div>
+                            <div className="flex items-center space-x-4 text-sm text-gray-600">
+                              <div className="flex items-center space-x-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                <span>From: {source.sender_name || source.sender_email || 'Unknown'}</span>
+                              </div>
+                              {source.sender_email && (
+                                <div className="flex items-center space-x-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                  <span className="text-xs font-mono bg-gray-200 px-2 py-1 rounded">
+                                    {source.sender_email}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-1 text-xs text-gray-500 ml-4">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span>{new Date(source.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        
+                        {source.question_text && (
+                          <div className="mt-3 p-3 bg-white rounded border border-gray-200">
+                            <h6 className="text-xs font-medium text-gray-700 mb-2 uppercase tracking-wide">
+                              Extracted Question:
+                            </h6>
+                            <p className="text-sm text-gray-800 leading-relaxed">
+                              {source.question_text}
+                            </p>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleCloseSourcesModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

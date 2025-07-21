@@ -14,6 +14,7 @@ const redisClient = require('./src/config/redis');
 const authRoutes = require('./src/routes/auth');
 const emailRoutes = require('./src/routes/emails');
 const faqRoutes = require('./src/routes/faqs');
+const faqSourcesRoutes = require('./src/routes/faq-sources');
 const accountRoutes = require('./src/routes/accounts');
 const dashboardRoutes = require('./src/routes/dashboard');
 const exportRoutes = require('./src/routes/export');
@@ -22,6 +23,7 @@ const adminRoutes = require('./src/routes/admin');
 const debugOAuthRoutes = require('./src/routes/debug-oauth');
 const testOAuthCallbackRoutes = require('./src/routes/test-oauth-callback');
 const testDbRoutes = require('./src/routes/test-db');
+const migrateRoutes = require('./src/routes/migrate');
 const { initializeQueues } = require('./src/services/queueService');
 const { startScheduledJobs } = require('./src/services/schedulerService');
 
@@ -112,11 +114,13 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/faqs', faqRoutes);
+app.use('/api/faq-sources', faqSourcesRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/migrate', migrateRoutes);
 
 // Test OAuth callback route (temporary for debugging)
 app.use('/api/test/oauth', testOAuthCallbackRoutes);

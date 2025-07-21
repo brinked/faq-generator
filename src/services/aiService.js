@@ -76,18 +76,21 @@ ${fullText}
 ${conversationContext}
 
 Instructions:
-1. Focus on genuine customer questions that would be commonly asked by other customers
-2. Extract the exact question text as it appears in the email
-3. If there's a corresponding answer in this email or the conversation thread, extract that too
-4. Prioritize questions about products, services, policies, procedures, or common issues
-5. Ignore:
+1. ONLY extract questions from CUSTOMERS, not from business/company representatives
+2. Focus on genuine customer questions that would be commonly asked by other customers
+3. Extract the exact question text as it appears in the email
+4. If there's a corresponding answer in this email or the conversation thread, extract that too
+5. Prioritize questions about products, services, policies, procedures, or common issues
+6. IGNORE completely:
+   - Questions FROM business emails (like info@, support@, sales@, admin@, etc.)
    - Internal questions between staff
+   - Business-to-customer questions (like "What's your address?", "When do you need this?")
    - Scheduling or appointment-specific requests
    - Very personal or account-specific details
    - Spam or promotional content
    - Questions already fully answered in the same email
-6. Rate your confidence (0-1) for each question based on its FAQ suitability
-7. Consider the conversation context to better understand the customer's intent
+7. Rate your confidence (0-1) for each question based on its FAQ suitability
+8. Consider the conversation context to better understand if this is a customer asking a business
 
 Respond in JSON format:
 {
@@ -98,7 +101,8 @@ Respond in JSON format:
       "answer": "answer if found in email thread, or null",
       "confidence": 0.0-1.0,
       "context": "surrounding context for the question",
-      "category": "suggested category (e.g., billing, technical, general)"
+      "category": "suggested category (e.g., billing, technical, general)",
+      "isFromCustomer": true
     }
   ],
   "overallConfidence": 0.0-1.0,

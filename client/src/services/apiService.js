@@ -176,6 +176,10 @@ class ApiService {
     return this.request('/api/faqs/categories');
   }
 
+  async getFAQSources(faqId) {
+    return this.request(`/api/faq-sources/${faqId}`);
+  }
+
   // Dashboard and analytics
   async getDashboardStats() {
     return this.request('/api/dashboard/stats');
