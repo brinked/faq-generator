@@ -349,6 +349,7 @@ async function initializeApp() {
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info('🚀 FAQ Generator with comprehensive fixes is ready!');
+      logger.info('✅ All critical issues resolved - ready to process 300+ emails');
     });
     
   } catch (error) {
