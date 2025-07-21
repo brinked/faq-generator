@@ -126,8 +126,17 @@ Respond in JSON format:
         max_tokens: 1200
       });
 
-      // Clean the response content to handle markdown code blocks
-      let content = response.data.choices[0].message.content.trim();
+      // Handle both v3 and v4 API response formats
+      let content;
+      if (response.data && response.data.choices) {
+        // v3 API format
+        content = response.data.choices[0].message.content.trim();
+      } else if (response.choices) {
+        // v4 API format
+        content = response.choices[0].message.content.trim();
+      } else {
+        throw new Error('Unexpected OpenAI API response format');
+      }
       
       // Log the raw content for debugging
       logger.debug('Raw AI response content:', content.substring(0, 200) + '...');

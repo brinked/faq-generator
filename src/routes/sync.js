@@ -431,14 +431,14 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
   let questionsFound = 0;
   let errors = 0;
   let consecutiveErrors = 0;
-  const maxConsecutiveErrors = 5; // Circuit breaker threshold
+  const maxConsecutiveErrors = 15; // Increased from 5 to 15 - more resilient
   
   // Add memory monitoring
   const startMemory = process.memoryUsage();
-  logger.info(`Starting ultra-conservative email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
+  logger.info(`Starting optimized email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
   
-  // Ultra-conservative batch size to prevent server crashes
-  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 1; // Process one email at a time
+  // More balanced batch size - increased from 1 to 3 for better throughput
+  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 3;
   const totalBatches = Math.ceil(emails.length / batchSize);
   
   for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -470,8 +470,8 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
           batchResults.push({ status: 'rejected', reason: error });
         }
         
-        // Longer delay between emails to prevent overwhelming the AI service
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Increased from 100ms to 1000ms
+        // Reduced delay between emails for better throughput
+        await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 1000ms to 200ms
       }
       
       // Collect all questions from successful results
@@ -565,14 +565,9 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
         });
       }
       
-      // Add an even longer pause between batches to prevent overwhelming the system
+      // Optimized pause between batches
       if (batchIndex < totalBatches - 1) { // Don't pause after the last batch
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2000ms pause between batches
-      }
-      
-      // Small delay between batches to prevent overwhelming the system
-      if (batchIndex < totalBatches - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 500)); // Reduced from 2000ms to 500ms
       }
       
     } catch (batchError) {
@@ -590,7 +585,7 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
     }
   }
   
-  // Generate FAQ groups
+  // Generate FAQ groups with better error handling
   let faqResult = { groupsCreated: 0, questionsGrouped: 0 };
   try {
     logger.info('Starting FAQ generation process...');
@@ -598,6 +593,16 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
     logger.info(`FAQ generation completed: ${faqResult.generated || 0} generated, ${faqResult.updated || 0} updated`);
   } catch (faqError) {
     logger.error('FAQ generation failed:', faqError);
+    
+    // Check if it's a database function error
+    if (faqError.message && faqError.message.includes('update_faq_group_stats')) {
+      logger.error('❌ Missing database function: update_faq_group_stats - Run migration: npm run migrate');
+      if (io) {
+        io.emit('faq_processing_error', {
+          error: 'Database migration required: Missing update_faq_group_stats function. Please run: npm run migrate'
+        });
+      }
+    }
   }
   
   const result = {
