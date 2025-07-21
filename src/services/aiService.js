@@ -330,7 +330,7 @@ Instructions:
 Respond with just the improved question text, nothing else.
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -346,7 +346,7 @@ Respond with just the improved question text, nothing else.
         max_tokens: 200
       });
 
-      return response.choices[0].message.content.trim();
+      return response.data.choices[0].message.content.trim();
 
     } catch (error) {
       logger.error('Error improving question text:', error);
@@ -382,7 +382,7 @@ Instructions:
 Respond with just the consolidated answer, nothing else.
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -398,7 +398,7 @@ Respond with just the consolidated answer, nothing else.
         max_tokens: 500
       });
 
-      return response.choices[0].message.content.trim();
+      return response.data.choices[0].message.content.trim();
 
     } catch (error) {
       logger.error('Error generating consolidated answer:', error);
@@ -428,7 +428,7 @@ Question: ${question}
 Respond with just the category name, nothing else.
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -444,7 +444,7 @@ Respond with just the category name, nothing else.
         max_tokens: 50
       });
 
-      return response.choices[0].message.content.trim();
+      return response.data.choices[0].message.content.trim();
 
     } catch (error) {
       logger.error('Error categorizing question:', error);
@@ -471,7 +471,7 @@ Instructions:
 Respond with a comma-separated list of tags, nothing else.
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -487,7 +487,7 @@ Respond with a comma-separated list of tags, nothing else.
         max_tokens: 100
       });
 
-      const tags = response.choices[0].message.content
+      const tags = response.data.choices[0].message.content
         .split(',')
         .map(tag => tag.trim().toLowerCase())
         .filter(tag => tag.length > 0);
