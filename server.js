@@ -26,6 +26,7 @@ const testDbRoutes = require('./src/routes/test-db');
 const migrateRoutes = require('./src/routes/migrate');
 const { initializeQueues } = require('./src/services/queueService');
 const { startScheduledJobs } = require('./src/services/schedulerService');
+const healthMonitor = require('./src/services/healthMonitor');
 
 const app = express();
 const server = http.createServer(app);
@@ -159,29 +160,60 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
+// Enhanced health check endpoint with comprehensive monitoring
 app.get('/api/health', async (req, res) => {
   try {
+    const healthStatus = healthMonitor.getHealthStatus();
+    const healthMetrics = healthMonitor.getHealthMetrics();
+    
     // Check database connection
     await db.query('SELECT 1');
     
     // Check Redis connection
     await redisClient.ping();
     
-    res.json({
-      status: 'healthy',
+    const response = {
+      status: healthStatus.overall,
       timestamp: new Date().toISOString(),
       services: {
         database: 'connected',
         redis: 'connected'
-      }
-    });
+      },
+      metrics: healthMetrics,
+      monitoring: healthStatus.monitoring,
+      readyForProcessing: healthMonitor.isReadyForProcessing()
+    };
+    
+    const statusCode = healthStatus.overall === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(response);
+    
   } catch (error) {
     logger.error('Health check failed:', error);
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
-      error: error.message
+      error: error.message,
+      monitoring: false
+    });
+  }
+});
+
+// Detailed health metrics endpoint
+app.get('/api/health/metrics', (req, res) => {
+  try {
+    const metrics = healthMonitor.getHealthMetrics();
+    const recommendations = healthMonitor.getProcessingRecommendations();
+    
+    res.json({
+      metrics,
+      recommendations,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Health metrics failed:', error);
+    res.status(500).json({
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -309,9 +341,14 @@ async function initializeApp() {
     startScheduledJobs();
     logger.info('Scheduled jobs started');
     
+    // Start health monitoring
+    healthMonitor.startMonitoring(30000); // Check every 30 seconds
+    logger.info('Health monitoring started');
+    
     // Start server
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+      logger.info('🚀 FAQ Generator with comprehensive fixes is ready!');
     });
     
   } catch (error) {

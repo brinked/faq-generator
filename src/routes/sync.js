@@ -250,19 +250,19 @@ router.post('/refresh/:accountId', async (req, res) => {
 });
 
 /**
- * Trigger FAQ generation for unprocessed emails
+ * Trigger FAQ generation for unprocessed emails - Memory Optimized
  */
 router.post('/process-faqs', async (req, res) => {
   try {
-    const { limit = 100, accountId = null } = req.body;
+    const { limit = 50, accountId = null } = req.body; // Reduced default limit
     
-    logger.info('FAQ processing triggered via API', { limit, accountId });
+    logger.info('Memory-optimized FAQ processing triggered via API', { limit, accountId });
     
     // Import services here to avoid circular dependencies
     const EmailService = require('../services/emailService');
     const AIService = require('../services/aiService');
     const FAQService = require('../services/faqService');
-    const db = require('../config/database');
+    const MemoryOptimizedProcessor = require('../services/memoryOptimizedProcessor');
     
     const emailService = new EmailService();
     const aiService = new AIService();
@@ -285,17 +285,21 @@ router.post('/process-faqs', async (req, res) => {
       });
     }
     
+    // Create memory-optimized processor
+    const processor = new MemoryOptimizedProcessor(aiService, emailService, faqService);
+    
     // Start processing in background
-    const processingPromise = processEmailsForFAQs(filteredEmails, aiService, emailService, faqService, req.io);
+    const processingPromise = processor.processEmails(filteredEmails, req.io);
     
     // Don't wait for completion, return immediately
     res.json({
       success: true,
-      message: `Started processing ${filteredEmails.length} filtered emails (${emails.length - filteredEmails.length} emails filtered out)`,
+      message: `Started memory-optimized processing of ${filteredEmails.length} filtered emails (${emails.length - filteredEmails.length} emails filtered out)`,
       emailCount: filteredEmails.length,
       totalEmails: emails.length,
       filteredOut: emails.length - filteredEmails.length,
-      note: 'Processing is running in background. Check status for progress.'
+      processingMode: 'memory-optimized',
+      note: 'Processing is running in background with memory management. Check status for progress.'
     });
     
     // Handle processing completion/failure in background
