@@ -424,6 +424,43 @@ router.get('/faq-status', async (req, res) => {
 });
 
 /**
+ * Process a single email with timeout to prevent hanging
+ */
+async function processEmailWithTimeout(email, aiService, timeout = 30000) {
+  return new Promise(async (resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Email processing timeout after ${timeout}ms`));
+    }, timeout);
+
+    try {
+      // Limit email content size to prevent memory issues
+      const limitedEmail = {
+        ...email,
+        body_text: email.body_text ? email.body_text.substring(0, 10000) : '',
+        body_html: email.body_html ? email.body_html.substring(0, 10000) : '',
+        subject: email.subject ? email.subject.substring(0, 500) : ''
+      };
+
+      const result = await aiService.detectQuestions(
+        limitedEmail.body_text || limitedEmail.body_html || '',
+        limitedEmail.subject || '',
+        [] // No thread emails for now to reduce complexity
+      );
+
+      clearTimeout(timeoutId);
+      resolve({
+        success: true,
+        questions: result.questions || [],
+        confidence: result.overallConfidence || 0
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      reject(error);
+    }
+  });
+}
+
+/**
  * Process emails for FAQs (background function) - Ultra-conservative with circuit breaker
  */
 async function processEmailsForFAQs(emails, aiService, emailService, faqService, io) {
@@ -466,8 +503,22 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
         try {
           const result = await processEmailWithTimeout(email, aiService);
           batchResults.push({ status: 'fulfilled', value: result });
+          consecutiveErrors = 0; // Reset on success
         } catch (error) {
+          logger.error(`Error processing email ${email.id}:`, error.message);
           batchResults.push({ status: 'rejected', reason: error });
+          consecutiveErrors++;
+          
+          // Skip problematic emails after 3 attempts
+          if (consecutiveErrors >= 3) {
+            logger.warn(`Skipping problematic email ${email.id} after 3 consecutive errors to prevent system crash`);
+            // Mark as failed and continue
+            try {
+              await emailService.markEmailProcessed(email.id, 'failed', `Skipped after 3 consecutive errors: ${error.message}`);
+            } catch (markError) {
+              logger.error(`Failed to mark email ${email.id} as failed:`, markError.message);
+            }
+          }
         }
         
         // Reduced delay between emails for better throughput
