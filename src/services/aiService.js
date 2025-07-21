@@ -1,15 +1,16 @@
-const OpenAI = require('openai');
+const { Configuration, OpenAIApi } = require('openai');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
 
 class AIService {
   constructor() {
-    this.openai = new OpenAI({
+    const configuration = new Configuration({
       apiKey: process.env.OPENAI_API_KEY
     });
+    this.openai = new OpenAIApi(configuration);
     
-    this.embeddingModel = process.env.OPENAI_MODEL || 'text-embedding-3-small';
-    this.chatModel = 'gpt-4o-mini';
+    this.embeddingModel = process.env.OPENAI_MODEL || 'text-embedding-ada-002';
+    this.chatModel = 'gpt-3.5-turbo';
     
     // Question detection patterns
     this.questionPatterns = [
@@ -109,7 +110,7 @@ Respond in JSON format:
 }
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -125,8 +126,8 @@ Respond in JSON format:
         max_tokens: 1200
       });
 
-      // Use v4 API response format
-      const content = response.choices[0].message.content.trim();
+      // Use v3 API response format with error handling
+      const content = response.data.choices[0].message.content.trim();
       
       // Log the raw content for debugging
       logger.debug('Raw AI response content:', content.substring(0, 200) + '...');
@@ -235,12 +236,12 @@ Respond in JSON format:
         return JSON.parse(cached);
       }
 
-      const response = await this.openai.embeddings.create({
+      const response = await this.openai.createEmbedding({
         model: this.embeddingModel,
         input: text
       });
 
-      const embedding = response.data[0].embedding;
+      const embedding = response.data.data[0].embedding;
       
       // Cache the embedding for 24 hours
       await redisClient.set(cacheKey, JSON.stringify(embedding), { ttl: 86400 });
@@ -264,12 +265,12 @@ Respond in JSON format:
       for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
         
-        const response = await this.openai.embeddings.create({
+        const response = await this.openai.createEmbedding({
           model: this.embeddingModel,
           input: batch
         });
 
-        embeddings.push(...response.data.map(item => item.embedding));
+        embeddings.push(...response.data.data.map(item => item.embedding));
       }
 
       return embeddings;
@@ -329,7 +330,7 @@ Instructions:
 Respond with just the improved question text, nothing else.
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -345,7 +346,7 @@ Respond with just the improved question text, nothing else.
         max_tokens: 200
       });
 
-      return response.choices[0].message.content.trim();
+      return response.data.choices[0].message.content.trim();
 
     } catch (error) {
       logger.error('Error improving question text:', error);
@@ -381,7 +382,7 @@ Instructions:
 Respond with just the consolidated answer, nothing else.
 `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await this.openai.createChatCompletion({
         model: this.chatModel,
         messages: [
           {
@@ -397,7 +398,7 @@ Respond with just the consolidated answer, nothing else.
         max_tokens: 500
       });
 
-      return response.choices[0].message.content.trim();
+      return response.data.choices[0].message.content.trim();
 
     } catch (error) {
       logger.error('Error generating consolidated answer:', error);

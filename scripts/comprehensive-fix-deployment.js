@@ -95,15 +95,16 @@ class ComprehensiveFixDeployment {
         throw new Error('OPENAI_API_KEY environment variable is missing');
       }
       
-      // Test OpenAI API with new v4 syntax
-      const OpenAI = require('openai');
-      const openai = new OpenAI({
+      // Test OpenAI API with v3 syntax
+      const { Configuration, OpenAIApi } = require('openai');
+      const configuration = new Configuration({
         apiKey: process.env.OPENAI_API_KEY
       });
+      const openai = new OpenAIApi(configuration);
       
       // Test chat completion
-      const testResponse = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      const testResponse = await openai.createChatCompletion({
+        model: 'gpt-3.5-turbo',
         messages: [
           {
             role: 'user',
@@ -114,7 +115,7 @@ class ComprehensiveFixDeployment {
         temperature: 0
       });
       
-      const responseContent = testResponse.choices[0].message.content.trim();
+      const responseContent = testResponse.data.choices[0].message.content.trim();
       if (responseContent.includes('API_TEST_SUCCESS')) {
         logger.info('✅ OpenAI API connection successful');
         this.fixes.openaiApi = true;
@@ -124,12 +125,12 @@ class ComprehensiveFixDeployment {
       }
       
       // Test embedding generation
-      const embeddingResponse = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
+      const embeddingResponse = await openai.createEmbedding({
+        model: 'text-embedding-ada-002',
         input: 'Test embedding generation'
       });
       
-      if (embeddingResponse.data && embeddingResponse.data.length > 0) {
+      if (embeddingResponse.data && embeddingResponse.data.data && embeddingResponse.data.data.length > 0) {
         logger.info('✅ OpenAI embedding generation successful');
       } else {
         throw new Error('Embedding generation failed');
