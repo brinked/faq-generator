@@ -424,27 +424,40 @@ router.get('/faq-status', async (req, res) => {
 });
 
 /**
- * Process emails for FAQs (background function) - Optimized with smaller batches and better error handling
+ * Process emails for FAQs (background function) - Ultra-conservative with circuit breaker
  */
 async function processEmailsForFAQs(emails, aiService, emailService, faqService, io) {
   let processedCount = 0;
   let questionsFound = 0;
   let errors = 0;
+  let consecutiveErrors = 0;
+  const maxConsecutiveErrors = 5; // Circuit breaker threshold
   
   // Add memory monitoring
   const startMemory = process.memoryUsage();
-  logger.info(`Starting optimized email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
+  logger.info(`Starting ultra-conservative email processing. Initial memory: ${Math.round(startMemory.heapUsed / 1024 / 1024)}MB`);
   
-  // Use smaller batch size to prevent memory issues and timeouts
-  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 3; // Reduced from 5 to 3
+  // Ultra-conservative batch size to prevent server crashes
+  const batchSize = parseInt(process.env.EMAIL_BATCH_SIZE) || 1; // Process one email at a time
   const totalBatches = Math.ceil(emails.length / batchSize);
   
   for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    // Circuit breaker: stop processing if too many consecutive errors
+    if (consecutiveErrors >= maxConsecutiveErrors) {
+      logger.error(`Circuit breaker triggered: ${consecutiveErrors} consecutive errors. Stopping processing to prevent server crash.`);
+      if (io) {
+        io.emit('faq_processing_error', {
+          error: `Processing stopped due to ${consecutiveErrors} consecutive errors to prevent server crash`
+        });
+      }
+      break;
+    }
+    
     const batchStart = batchIndex * batchSize;
     const batchEnd = Math.min(batchStart + batchSize, emails.length);
     const emailBatch = emails.slice(batchStart, batchEnd);
     
-    logger.info(`Processing batch ${batchIndex + 1}/${totalBatches} (${emailBatch.length} emails)`);
+    logger.info(`Processing batch ${batchIndex + 1}/${totalBatches} (${emailBatch.length} emails) - Consecutive errors: ${consecutiveErrors}`);
     
     try {
       // Process emails sequentially instead of concurrently to reduce memory pressure
@@ -457,8 +470,8 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
           batchResults.push({ status: 'rejected', reason: error });
         }
         
-        // Small delay between emails to prevent overwhelming the AI service
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Longer delay between emails to prevent overwhelming the AI service
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Increased from 100ms to 1000ms
       }
       
       // Collect all questions from successful results
@@ -508,11 +521,13 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
           emailUpdates.push({ id: email.id, status: 'completed', error: null });
           processedCount++;
           questionsFound += questions.length;
+          consecutiveErrors = 0; // Reset consecutive errors on success
         } else {
           const errorMsg = result.status === 'rejected' ? result.reason.message : 'Processing failed';
           emailUpdates.push({ id: email.id, status: 'failed', error: errorMsg });
           logger.error(`Error processing email ${email.id}:`, errorMsg);
           errors++;
+          consecutiveErrors++; // Increment consecutive errors
         }
       }
       
@@ -550,9 +565,9 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
         });
       }
       
-      // Add a longer pause between batches to prevent overwhelming the system
+      // Add an even longer pause between batches to prevent overwhelming the system
       if (batchIndex < totalBatches - 1) { // Don't pause after the last batch
-        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms pause between batches
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2000ms pause between batches
       }
       
       // Small delay between batches to prevent overwhelming the system
@@ -606,8 +621,8 @@ async function processEmailsForFAQs(emails, aiService, emailService, faqService,
  */
 async function processEmailWithTimeout(email, aiService) {
   try {
-    // Increase timeout to 15s but add better error handling
-    const timeoutMs = 15000;
+    // Reduce timeout to 10s to prevent long-running processes that crash the server
+    const timeoutMs = 10000;
     
     const result = await Promise.race([
       aiService.detectQuestions(
