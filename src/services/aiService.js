@@ -106,7 +106,7 @@ Respond in JSON format:
 }
 `;
 
-      const response = await this.openai.createChatCompletion({
+      const response = await this.openai.chat.completions.create({
         model: this.chatModel,
         messages: [
           {
@@ -123,7 +123,10 @@ Respond in JSON format:
       });
 
       // Clean the response content to handle markdown code blocks
-      let content = response.data.choices[0].message.content.trim();
+      let content = response.choices[0].message.content.trim();
+      
+      // Log the raw content for debugging
+      logger.debug('Raw AI response content:', content.substring(0, 200) + '...');
       
       // Remove markdown code block markers if present
       if (content.startsWith('```json')) {
@@ -132,7 +135,34 @@ Respond in JSON format:
         content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
       
-      const result = JSON.parse(content);
+      // Additional cleanup for common AI response issues
+      content = content.replace(/^[^{]*({.*})[^}]*$/s, '$1'); // Extract JSON object
+      content = content.trim();
+      
+      let result;
+      try {
+        result = JSON.parse(content);
+      } catch (parseError) {
+        logger.error('JSON parse error in AI response:', {
+          error: parseError.message,
+          content: content.substring(0, 500),
+          fullContent: content
+        });
+        
+        // Try to extract JSON from the content more aggressively
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            result = JSON.parse(jsonMatch[0]);
+            logger.info('Successfully recovered JSON from malformed response');
+          } catch (secondParseError) {
+            logger.error('Failed to recover JSON:', secondParseError.message);
+            throw new Error(`Failed to parse AI response as JSON: ${parseError.message}`);
+          }
+        } else {
+          throw new Error(`No valid JSON found in AI response: ${content.substring(0, 200)}`);
+        }
+      }
       
       // Filter questions based on confidence and length
       const minConfidence = parseFloat(process.env.QUESTION_CONFIDENCE_THRESHOLD) || 0.7;
