@@ -134,9 +134,20 @@ class EmailService {
    * Sync Gmail account
    */
   async syncGmailAccount(account, maxEmails) {
-    // Implementation would go here
-    logger.info('Gmail sync not implemented in this version');
-    return { synced: 0 };
+    const gmailService = new (require('./gmailService'))();
+    gmailService.setCredentials({
+      access_token: account.access_token,
+      refresh_token: account.refresh_token,
+      expiry_date: account.token_expires_at
+    });
+
+    const syncResult = await gmailService.syncEmails(account.id, { maxEmails });
+    
+    if (syncResult.messages && syncResult.messages.length > 0) {
+      await this.saveEmails(account.id, syncResult.messages);
+    }
+    
+    return { synced: syncResult.processed };
   }
 
   /**
@@ -202,6 +213,42 @@ class EmailService {
    */
   async getAccountById(accountId) {
     return this.getAccounts(accountId);
+  }
+
+  /**
+   * Save emails to the database
+   */
+  async saveEmails(accountId, emails) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      for (const email of emails) {
+        const query = `
+          INSERT INTO emails (account_id, message_id, thread_id, subject, body_text, sender_email, sender_name, received_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (message_id) DO NOTHING
+        `;
+        await client.query(query, [
+          accountId,
+          email.id,
+          email.threadId,
+          email.subject,
+          email.bodyText,
+          email.from,
+          email.from, // Using 'from' for both sender_email and sender_name for simplicity
+          email.internalDate
+        ]);
+      }
+      
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error saving emails:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
