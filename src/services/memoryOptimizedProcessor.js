@@ -108,7 +108,7 @@ class MemoryOptimizedProcessor {
         [] // No thread context to reduce memory usage
       );
       
-      result = await Promise.race([processingPromise, timeoutPromise]);
+      const result = await Promise.race([processingPromise, timeoutPromise]);
       
       // Store questions if found
       if (result.hasQuestions && result.questions.length > 0) {
@@ -116,11 +116,24 @@ class MemoryOptimizedProcessor {
         this.stats.questionsFound += result.questions.length;
       }
       
-      // Mark email as processed
-      await db.query(
-        'UPDATE emails SET processed_for_faq = true, processed_at = NOW() WHERE id = $1',
-        [emailId]
-      );
+      // Mark email as processed (with column check)
+      try {
+        await db.query(
+          'UPDATE emails SET processed_for_faq = true, processed_at = NOW() WHERE id = $1',
+          [emailId]
+        );
+      } catch (updateError) {
+        if (updateError.message.includes('column') && updateError.message.includes('does not exist')) {
+          logger.warn('Missing database columns, skipping processed_for_faq update');
+          // Try alternative update without the missing columns
+          await db.query(
+            'UPDATE emails SET updated_at = NOW() WHERE id = $1',
+            [emailId]
+          );
+        } else {
+          throw updateError;
+        }
+      }
       
       this.stats.processed++;
       this.consecutiveErrors = 0; // Reset consecutive error counter
@@ -146,15 +159,28 @@ class MemoryOptimizedProcessor {
         totalErrors: this.totalErrors
       });
       
-      // Mark as processed with error
-      await db.query(
-        `UPDATE emails 
-         SET processed_for_faq = true, 
-             processed_at = NOW(),
-             processing_error = $2
-         WHERE id = $1`,
-        [emailId, error.message]
-      );
+      // Mark as processed with error (with column check)
+      try {
+        await db.query(
+          `UPDATE emails
+           SET processed_for_faq = true,
+               processed_at = NOW(),
+               processing_error = $2
+           WHERE id = $1`,
+          [emailId, error.message]
+        );
+      } catch (updateError) {
+        if (updateError.message.includes('column') && updateError.message.includes('does not exist')) {
+          logger.warn('Missing database columns, skipping error update');
+          // Try alternative update
+          await db.query(
+            'UPDATE emails SET updated_at = NOW() WHERE id = $1',
+            [emailId]
+          );
+        } else {
+          throw updateError;
+        }
+      }
       
       // Check circuit breaker
       if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
