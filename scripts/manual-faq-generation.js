@@ -41,27 +41,30 @@ async function manualFAQGeneration() {
     // Test different configurations
     const configurations = [
       {
-        name: 'Permissive Settings (Single Questions)',
+        name: 'Auto-Fix with Permissive Settings',
         options: {
           minQuestionCount: 1,
           maxFAQs: 10,
-          forceRegenerate: false
+          forceRegenerate: false,
+          autoFix: true
         }
       },
       {
-        name: 'Standard Settings (Paired Questions)',
+        name: 'Auto-Fix with Standard Settings',
         options: {
           minQuestionCount: 2,
           maxFAQs: 20,
-          forceRegenerate: false
+          forceRegenerate: false,
+          autoFix: true
         }
       },
       {
-        name: 'Force Regenerate All',
+        name: 'Auto-Fix with Force Regenerate',
         options: {
           minQuestionCount: 1,
           maxFAQs: 50,
-          forceRegenerate: true
+          forceRegenerate: true,
+          autoFix: true
         }
       }
     ];

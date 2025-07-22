@@ -18,17 +18,31 @@ class FAQService {
       const {
         minQuestionCount = 2,
         maxFAQs = 100,
-        forceRegenerate = false
+        forceRegenerate = false,
+        autoFix = true
       } = options;
 
       logger.info('Starting FAQ generation process...');
       const startTime = Date.now();
+
+      // Auto-fix NULL confidence scores and embeddings if enabled
+      if (autoFix) {
+        await this.autoFixDataIssues();
+      }
 
       // Get unprocessed questions with embeddings
       const questions = await this.getQuestionsForFAQGeneration();
       
       if (questions.length === 0) {
         logger.info('No questions available for FAQ generation');
+        
+        // If no questions after auto-fix, try the direct FAQ creation approach
+        if (autoFix) {
+          logger.info('Attempting direct FAQ creation from fixed data...');
+          const directResult = await this.createFAQsDirectly();
+          return directResult;
+        }
+        
         return { generated: 0, updated: 0 };
       }
 
@@ -730,6 +744,261 @@ class FAQService {
     } catch (error) {
       logger.error('Error searching similar FAQs:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Auto-fix NULL confidence scores and embeddings
+   */
+  async autoFixDataIssues() {
+    try {
+      logger.info('Starting auto-fix for data issues...');
+      
+      const fixedConfidence = await this.fixNullConfidenceScores();
+      const fixedEmbeddings = await this.fixNullEmbeddings();
+      
+      logger.info(`Auto-fix completed: ${fixedConfidence} confidence scores, ${fixedEmbeddings} embeddings fixed`);
+      
+      return { fixedConfidence, fixedEmbeddings };
+    } catch (error) {
+      logger.error('Error in auto-fix:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fix NULL confidence scores using AI re-evaluation
+   */
+  async fixNullConfidenceScores() {
+    try {
+      const nullConfidenceQuery = `
+        SELECT q.id, q.question_text, q.answer_text, e.subject, e.body_text
+        FROM questions q
+        JOIN emails e ON q.email_id = e.id
+        WHERE q.confidence_score IS NULL
+        AND q.is_customer_question = true
+        ORDER BY q.created_at DESC
+        LIMIT 20
+      `;
+      
+      const result = await db.query(nullConfidenceQuery);
+      const questionsToFix = result.rows;
+      
+      if (questionsToFix.length === 0) {
+        return 0;
+      }
+      
+      logger.info(`Fixing ${questionsToFix.length} questions with NULL confidence scores`);
+      
+      let fixedCount = 0;
+      
+      for (const question of questionsToFix) {
+        try {
+          const detection = await this.aiService.detectQuestions(
+            question.body_text || '',
+            question.subject || ''
+          );
+          
+          let bestConfidence = 0.5; // Default fallback
+          
+          if (detection.questions && detection.questions.length > 0) {
+            const matchingQuestion = detection.questions.find(q =>
+              q.question.toLowerCase().includes(question.question_text.toLowerCase().substring(0, 20)) ||
+              question.question_text.toLowerCase().includes(q.question.toLowerCase().substring(0, 20))
+            );
+            
+            if (matchingQuestion) {
+              bestConfidence = matchingQuestion.confidence;
+            } else {
+              bestConfidence = Math.max(...detection.questions.map(q => q.confidence));
+            }
+          }
+          
+          await db.query(
+            'UPDATE questions SET confidence_score = $1, updated_at = NOW() WHERE id = $2',
+            [bestConfidence, question.id]
+          );
+          
+          fixedCount++;
+          
+          // Small delay to respect rate limits
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+        } catch (error) {
+          logger.warn(`Failed to fix confidence for question ${question.id}:`, error.message);
+          
+          // Set default confidence to prevent NULL
+          try {
+            await db.query('UPDATE questions SET confidence_score = $1 WHERE id = $2', [0.5, question.id]);
+            fixedCount++;
+          } catch (defaultError) {
+            logger.error(`Failed to set default confidence: ${defaultError.message}`);
+          }
+        }
+      }
+      
+      return fixedCount;
+    } catch (error) {
+      logger.error('Error fixing NULL confidence scores:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Fix NULL embeddings
+   */
+  async fixNullEmbeddings() {
+    try {
+      const nullEmbeddingQuery = `
+        SELECT id, question_text
+        FROM questions
+        WHERE embedding IS NULL
+        AND is_customer_question = true
+        AND confidence_score >= 0.3
+        ORDER BY confidence_score DESC
+        LIMIT 20
+      `;
+      
+      const result = await db.query(nullEmbeddingQuery);
+      const questionsToFix = result.rows;
+      
+      if (questionsToFix.length === 0) {
+        return 0;
+      }
+      
+      logger.info(`Fixing ${questionsToFix.length} questions with NULL embeddings`);
+      
+      let fixedCount = 0;
+      
+      for (const question of questionsToFix) {
+        try {
+          const embedding = await this.aiService.generateEmbedding(question.question_text);
+          
+          if (embedding && embedding.length > 0) {
+            await db.query(
+              'UPDATE questions SET embedding = $1::vector, updated_at = NOW() WHERE id = $2',
+              [JSON.stringify(embedding), question.id]
+            );
+            
+            fixedCount++;
+          }
+          
+          // Small delay to respect rate limits
+          await new Promise(resolve => setTimeout(resolve, 150));
+          
+        } catch (error) {
+          logger.warn(`Failed to fix embedding for question ${question.id}:`, error.message);
+        }
+      }
+      
+      return fixedCount;
+    } catch (error) {
+      logger.error('Error fixing NULL embeddings:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Create FAQs directly from fixed data (fallback method)
+   */
+  async createFAQsDirectly() {
+    try {
+      logger.info('Creating FAQs directly from fixed data...');
+      
+      const eligibleQuestionsQuery = `
+        SELECT q.id, q.question_text, q.answer_text, q.confidence_score
+        FROM questions q
+        WHERE q.is_customer_question = true
+          AND q.confidence_score >= 0.3
+          AND q.embedding IS NOT NULL
+          AND q.answer_text IS NOT NULL
+          AND LENGTH(q.answer_text) > 20
+          AND NOT EXISTS (
+            SELECT 1 FROM question_groups qg WHERE qg.question_id = q.id
+          )
+        ORDER BY q.confidence_score DESC
+        LIMIT 10
+      `;
+      
+      const result = await db.query(eligibleQuestionsQuery);
+      const eligibleQuestions = result.rows;
+      
+      if (eligibleQuestions.length === 0) {
+        logger.info('No eligible questions found for direct FAQ creation');
+        return { generated: 0, updated: 0 };
+      }
+      
+      logger.info(`Creating FAQs from ${eligibleQuestions.length} eligible questions`);
+      
+      let createdCount = 0;
+      
+      for (const question of eligibleQuestions) {
+        try {
+          // Get the existing embedding
+          const embeddingResult = await db.query('SELECT embedding FROM questions WHERE id = $1', [question.id]);
+          const existingEmbedding = embeddingResult.rows[0]?.embedding;
+          
+          if (!existingEmbedding) {
+            continue;
+          }
+          
+          // Generate improved question and metadata
+          const improvedQuestion = await this.aiService.improveQuestionText(question.question_text);
+          const category = await this.aiService.categorizeQuestion(question.question_text);
+          const tags = await this.aiService.extractTags(question.question_text);
+          
+          const title = improvedQuestion.length > 100
+            ? improvedQuestion.substring(0, 97) + '...'
+            : improvedQuestion;
+          
+          // Create FAQ
+          const insertQuery = `
+            INSERT INTO faq_groups (
+              title, representative_question, consolidated_answer, question_count,
+              frequency_score, avg_confidence, representative_embedding,
+              is_published, category, tags, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+            RETURNING id
+          `;
+          
+          const faqResult = await db.query(insertQuery, [
+            title,
+            improvedQuestion,
+            question.answer_text,
+            1,
+            question.confidence_score,
+            question.confidence_score,
+            existingEmbedding,
+            true, // Auto-publish
+            category,
+            tags
+          ]);
+          
+          const faqId = faqResult.rows[0].id;
+          
+          // Associate question with FAQ
+          await db.query(
+            'INSERT INTO question_groups (question_id, group_id, similarity_score, is_representative) VALUES ($1, $2, $3, $4)',
+            [question.id, faqId, 1.0, true]
+          );
+          
+          createdCount++;
+          logger.info(`Created FAQ: "${title.substring(0, 60)}..." (Score: ${parseFloat(question.confidence_score).toFixed(3)})`);
+          
+          // Small delay to respect rate limits
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+        } catch (error) {
+          logger.warn(`Failed to create FAQ for question ${question.id}:`, error.message);
+        }
+      }
+      
+      logger.info(`Direct FAQ creation completed: ${createdCount} FAQs created`);
+      
+      return { generated: createdCount, updated: 0 };
+    } catch (error) {
+      logger.error('Error in direct FAQ creation:', error);
+      return { generated: 0, updated: 0 };
     }
   }
 }

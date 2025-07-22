@@ -36,8 +36,11 @@ async function runFAQGeneration() {
       process.exit(1);
     }, config.timeout);
     
-    // Run the FAQ generation
-    const result = await faqService.generateFAQs(config);
+    // Run the FAQ generation with auto-fix enabled
+    const result = await faqService.generateFAQs({
+      ...config,
+      autoFix: true // Enable auto-fix for production
+    });
     
     clearTimeout(timeoutId);
     
