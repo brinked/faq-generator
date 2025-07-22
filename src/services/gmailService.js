@@ -151,45 +151,140 @@ class GmailService {
   }
 
   /**
-   * Get user profile information
+   * Get user profile information with enhanced fallback mechanisms
    */
   async getUserProfile() {
     try {
-      const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
-      const response = await oauth2.userinfo.get();
-      
-      // Enhanced logging to capture the full response
-      logger.info('Full Gmail userinfo response:', {
-        data: JSON.stringify(response.data, null, 2),
-        status: response.status,
-        headers: response.headers
-      });
-      
-      let email = response.data.email || response.data.emailAddress;
-      
-      if (!email && Array.isArray(response.data.emails) && response.data.emails.length > 0) {
-        const primaryEmail = response.data.emails.find(e => e.type === 'account' && e.value);
-        email = primaryEmail ? primaryEmail.value : response.data.emails[0].value;
-        logger.warn('Primary email field missing, using fallback from emails array:', { email });
+      // Method 1: Try OAuth2 userinfo API
+      try {
+        const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
+        const response = await oauth2.userinfo.get();
+        
+        logger.info('Gmail userinfo API response:', {
+          hasData: !!response.data,
+          dataKeys: response.data ? Object.keys(response.data) : [],
+          email: response.data?.email,
+          verified_email: response.data?.verified_email,
+          status: response.status
+        });
+        
+        let email = response.data.email || response.data.emailAddress;
+        
+        if (!email && Array.isArray(response.data.emails) && response.data.emails.length > 0) {
+          const primaryEmail = response.data.emails.find(e => e.type === 'account' && e.value);
+          email = primaryEmail ? primaryEmail.value : response.data.emails[0].value;
+          logger.info('Using email from emails array:', { email });
+        }
+        
+        if (email) {
+          return {
+            ...response.data,
+            email: email,
+            name: response.data.name || response.data.given_name || email.split('@')[0]
+          };
+        }
+        
+        logger.warn('No email found in userinfo API response, trying fallback methods');
+      } catch (userInfoError) {
+        logger.warn('OAuth2 userinfo API failed, trying fallback methods:', {
+          message: userInfoError.message,
+          status: userInfoError.response?.status
+        });
       }
       
-      if (!email) {
-        logger.error('Could not determine email from userinfo response after all fallbacks:', response.data);
+      // Method 2: Try Gmail API to get profile
+      try {
+        const gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
+        const profileResponse = await gmail.users.getProfile({ userId: 'me' });
+        
+        logger.info('Gmail profile API response:', {
+          emailAddress: profileResponse.data.emailAddress,
+          messagesTotal: profileResponse.data.messagesTotal
+        });
+        
+        if (profileResponse.data.emailAddress) {
+          return {
+            email: profileResponse.data.emailAddress,
+            name: profileResponse.data.emailAddress.split('@')[0],
+            verified_email: true
+          };
+        }
+      } catch (profileError) {
+        logger.warn('Gmail profile API failed:', {
+          message: profileError.message,
+          status: profileError.response?.status
+        });
       }
       
-      return {
-        ...response.data,
-        email: email || null
-      };
+      // Method 3: Try to extract email from JWT token
+      try {
+        const credentials = this.oauth2Client.credentials;
+        if (credentials.id_token) {
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.decode(credentials.id_token);
+          
+          logger.info('JWT token decoded:', {
+            hasEmail: !!decoded?.email,
+            hasEmailVerified: !!decoded?.email_verified,
+            aud: decoded?.aud,
+            iss: decoded?.iss
+          });
+          
+          if (decoded && decoded.email) {
+            return {
+              email: decoded.email,
+              name: decoded.name || decoded.given_name || decoded.email.split('@')[0],
+              verified_email: decoded.email_verified || false,
+              picture: decoded.picture
+            };
+          }
+        }
+      } catch (jwtError) {
+        logger.warn('JWT token extraction failed:', {
+          message: jwtError.message,
+          hasIdToken: !!this.oauth2Client.credentials?.id_token
+        });
+      }
+      
+      // Method 4: Try alternative OAuth2 v1 API
+      try {
+        const oauth2v1 = google.oauth2({ version: 'v1', auth: this.oauth2Client });
+        const response = await oauth2v1.userinfo.get();
+        
+        logger.info('OAuth2 v1 userinfo response:', {
+          email: response.data.email,
+          verified_email: response.data.verified_email
+        });
+        
+        if (response.data.email) {
+          return {
+            ...response.data,
+            email: response.data.email,
+            name: response.data.name || response.data.email.split('@')[0]
+          };
+        }
+      } catch (v1Error) {
+        logger.warn('OAuth2 v1 API failed:', {
+          message: v1Error.message,
+          status: v1Error.response?.status
+        });
+      }
+      
+      // If all methods fail, throw an error
+      logger.error('All profile extraction methods failed - no email address could be retrieved');
+      throw new Error('Unable to retrieve email address from Google profile after trying all available methods');
       
     } catch (error) {
-      logger.error('Error getting Gmail user profile:', {
+      logger.error('Critical error in getUserProfile:', {
         message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        stack: error.stack
+        stack: error.stack,
+        credentials: {
+          hasAccessToken: !!this.oauth2Client.credentials?.access_token,
+          hasRefreshToken: !!this.oauth2Client.credentials?.refresh_token,
+          hasIdToken: !!this.oauth2Client.credentials?.id_token
+        }
       });
-      throw new Error('Failed to get user profile');
+      throw error;
     }
   }
 

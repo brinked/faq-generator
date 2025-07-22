@@ -138,20 +138,46 @@ router.get('/gmail/callback', async (req, res) => {
     
     // Set credentials and get user profile
     gmailService.setCredentials(tokens);
-    const profile = await gmailService.getUserProfile();
     
-    // Log the profile to debug
-    logger.info('Gmail profile received:', {
-      profile,
-      hasEmail: !!profile.email,
-      hasName: !!profile.name,
-      profileKeys: Object.keys(profile)
-    });
+    let profile;
+    try {
+      profile = await gmailService.getUserProfile();
+      
+      // Log the profile to debug
+      logger.info('Gmail profile received:', {
+        hasEmail: !!profile?.email,
+        hasName: !!profile?.name,
+        profileKeys: profile ? Object.keys(profile) : [],
+        email: profile?.email ? `${profile.email.substring(0, 3)}***@${profile.email.split('@')[1]}` : 'null'
+      });
+      
+    } catch (profileError) {
+      logger.error('Failed to get Gmail profile:', {
+        message: profileError.message,
+        stack: profileError.stack
+      });
+      return res.redirect(`${corsOrigin}/?error=profile_failed&details=${encodeURIComponent('Failed to retrieve Gmail profile information')}`);
+    }
     
-    // Ensure we have an email address
-    if (!profile.email) {
-      logger.error('No email address in Gmail profile after robust check:', profile);
-      return res.redirect(`${corsOrigin}/?error=no_email&details=${encodeURIComponent('Could not retrieve a valid email address from Gmail profile')}`);
+    // Ensure we have an email address after all fallback attempts
+    if (!profile || !profile.email) {
+      logger.error('No email address available after all profile extraction attempts:', {
+        hasProfile: !!profile,
+        profileKeys: profile ? Object.keys(profile) : [],
+        tokensAvailable: {
+          hasAccessToken: !!tokens.access_token,
+          hasRefreshToken: !!tokens.refresh_token,
+          hasIdToken: !!tokens.id_token
+        }
+      });
+      return res.redirect(`${corsOrigin}/?error=no_email&details=${encodeURIComponent('Could not retrieve email address from Gmail. Please try reconnecting your account.')}`);
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(profile.email)) {
+      logger.error('Invalid email format received from Gmail:', { email: profile.email });
+      return res.redirect(`${corsOrigin}/?error=invalid_email&details=${encodeURIComponent('Invalid email format received from Gmail')}`);
     }
     
     // Calculate token expiry - Gmail tokens can have either expiry_date or expires_in
@@ -171,25 +197,32 @@ router.get('/gmail/callback', async (req, res) => {
     const accountData = {
       email_address: profile.email,
       provider: 'gmail',
-      display_name: profile.name || profile.email, // Fallback to email if no name
+      display_name: profile.name || profile.email.split('@')[0], // Fallback to email username if no name
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       token_expires_at: tokenExpiresAt
     };
     
+    // Final validation before database operation
     if (!accountData.email_address) {
-      logger.error('CRITICAL: Attempted to create account with null email address. Aborting.', { accountData });
-      return res.redirect(`${corsOrigin}/?error=critical_no_email`);
+      logger.error('CRITICAL: Account data has null email address after validation. This should not happen.', {
+        accountData: { ...accountData, access_token: '[REDACTED]', refresh_token: '[REDACTED]' }
+      });
+      return res.redirect(`${corsOrigin}/?error=critical_no_email&details=${encodeURIComponent('Internal error: email validation failed')}`);
     }
-    if (!accountData.email_address) {
-      logger.error('CRITICAL: Attempted to create account with null email address. Aborting.', { accountData });
-      return res.redirect(`${corsOrigin}/?error=critical_no_email`);
+    
+    let account;
+    try {
+      account = await emailService.createOrUpdateAccount(accountData);
+    } catch (dbError) {
+      logger.error('Database error creating/updating account:', {
+        message: dbError.message,
+        code: dbError.code,
+        constraint: dbError.constraint,
+        email: profile.email ? `${profile.email.substring(0, 3)}***@${profile.email.split('@')[1]}` : 'null'
+      });
+      return res.redirect(`${corsOrigin}/?error=database_error&details=${encodeURIComponent('Failed to save account information')}`);
     }
-    if (!accountData.email_address) {
-      logger.error('CRITICAL: Attempted to create account with null email address. Aborting.', { accountData });
-      return res.redirect(`${corsOrigin}/?error=critical_no_email`);
-    }
-    const account = await emailService.createOrUpdateAccount(accountData);
     
     logger.info(`Gmail account connected: ${profile.email}`);
     

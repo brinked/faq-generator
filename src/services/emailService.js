@@ -337,6 +337,63 @@ class EmailService {
       throw error;
     }
   }
+
+  /**
+   * Delete an email account and all associated data
+   */
+  async deleteAccount(accountId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      logger.info(`Starting deletion of account ${accountId}`);
+      
+      // First, delete all emails associated with this account
+      const deleteEmailsQuery = 'DELETE FROM emails WHERE account_id = $1';
+      const emailsResult = await client.query(deleteEmailsQuery, [accountId]);
+      logger.info(`Deleted ${emailsResult.rowCount} emails for account ${accountId}`);
+      
+      // Delete all questions associated with emails from this account
+      const deleteQuestionsQuery = `
+        DELETE FROM questions
+        WHERE email_id IN (
+          SELECT id FROM emails WHERE account_id = $1
+        )
+      `;
+      const questionsResult = await client.query(deleteQuestionsQuery, [accountId]);
+      logger.info(`Deleted ${questionsResult.rowCount} questions for account ${accountId}`);
+      
+      // Finally, delete the account itself
+      const deleteAccountQuery = 'DELETE FROM email_accounts WHERE id = $1 RETURNING email_address, provider';
+      const accountResult = await client.query(deleteAccountQuery, [accountId]);
+      
+      if (accountResult.rows.length === 0) {
+        throw new Error(`Account ${accountId} not found`);
+      }
+      
+      const deletedAccount = accountResult.rows[0];
+      logger.info(`Successfully deleted account ${accountId}`, {
+        email: deletedAccount.email_address,
+        provider: deletedAccount.provider
+      });
+      
+      await client.query('COMMIT');
+      
+      return {
+        success: true,
+        message: `Account ${deletedAccount.email_address} and all associated data deleted successfully`,
+        deletedEmails: emailsResult.rowCount,
+        deletedQuestions: questionsResult.rowCount
+      };
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error(`Error deleting account ${accountId}:`, error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 module.exports = EmailService;
