@@ -13,6 +13,25 @@ router.get('/:faqId/sources', async (req, res) => {
     
     logger.info(`Getting email sources for FAQ ${faqId}`);
     
+    // First, check if the FAQ exists
+    const faqCheckQuery = `
+      SELECT id, title, representative_question, question_count
+      FROM faq_groups
+      WHERE id = $1
+    `;
+    const faqCheckResult = await db.query(faqCheckQuery, [faqId]);
+    
+    if (faqCheckResult.rows.length === 0) {
+      logger.warn(`FAQ ${faqId} not found in database`);
+      return res.status(404).json({
+        success: false,
+        error: 'FAQ not found'
+      });
+    }
+    
+    const faqInfo = faqCheckResult.rows[0];
+    logger.info(`Found FAQ: ${faqInfo.title} with ${faqInfo.question_count} questions`);
+    
     // Get all questions associated with this FAQ group
     const query = `
       SELECT
@@ -36,7 +55,9 @@ router.get('/:faqId/sources', async (req, res) => {
       ORDER BY qg.is_representative DESC, qg.similarity_score DESC, e.received_at DESC
     `;
     
+    logger.info(`Executing email sources query for FAQ ${faqId}`);
     const result = await db.query(query, [faqId]);
+    logger.info(`Query returned ${result.rows.length} email sources`);
     
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -73,22 +94,13 @@ router.get('/:faqId/sources', async (req, res) => {
       } : null
     });
     
-    // Get FAQ group info
-    const faqQuery = `
-      SELECT title, representative_question, question_count
-      FROM faq_groups 
-      WHERE id = $1
-    `;
-    const faqResult = await db.query(faqQuery, [faqId]);
-    const faqInfo = faqResult.rows[0];
-    
     res.json({
       success: true,
       faq: {
         id: faqId,
-        title: faqInfo?.title || 'Unknown FAQ',
-        representativeQuestion: faqInfo?.representative_question || '',
-        questionCount: parseInt(faqInfo?.question_count || 0)
+        title: faqInfo.title || 'Unknown FAQ',
+        representativeQuestion: faqInfo.representative_question || '',
+        questionCount: parseInt(faqInfo.question_count || 0)
       },
       emailSources: emailSources,
       totalSources: emailSources.length,

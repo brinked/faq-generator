@@ -94,7 +94,6 @@ class EmailService {
    */
   async syncAccount(accountId, options = {}) {
     const { maxEmails = 100 } = options;
-    
     try {
       const account = await this.getAccountById(accountId);
       
@@ -107,6 +106,95 @@ class EmailService {
       }
     } catch (error) {
       logger.error('Error syncing account:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync all active accounts
+   */
+  async syncAllAccounts(options = {}) {
+    const { maxEmails = 100, skipRecentlyProcessed = false } = options;
+    
+    try {
+      logger.info('Starting sync for all active accounts', { maxEmails, skipRecentlyProcessed });
+      
+      // Get all active accounts
+      const accounts = await this.getAccounts();
+      const activeAccounts = accounts.filter(acc => acc.status === 'active');
+      
+      logger.info(`Found ${activeAccounts.length} active accounts to sync`);
+      
+      const results = {
+        accounts: [],
+        totalSynced: 0,
+        errors: []
+      };
+      
+      // Sync each account
+      for (const account of activeAccounts) {
+        try {
+          // Skip if recently synced and skipRecentlyProcessed is true
+          if (skipRecentlyProcessed && account.last_sync_at) {
+            const lastSync = new Date(account.last_sync_at);
+            const hoursSinceSync = (Date.now() - lastSync.getTime()) / (1000 * 60 * 60);
+            
+            if (hoursSinceSync < 1) {
+              logger.info(`Skipping account ${account.id} - synced ${hoursSinceSync.toFixed(2)} hours ago`);
+              results.accounts.push({
+                accountId: account.id,
+                email: account.email_address,
+                status: 'skipped',
+                reason: 'recently_synced'
+              });
+              continue;
+            }
+          }
+          
+          logger.info(`Syncing account ${account.id} (${account.email_address})`);
+          const syncResult = await this.syncAccount(account.id, { maxEmails });
+          
+          results.accounts.push({
+            accountId: account.id,
+            email: account.email_address,
+            status: 'success',
+            synced: syncResult.synced || 0
+          });
+          
+          results.totalSynced += (syncResult.synced || 0);
+          
+          // Update last sync time
+          await db.query(
+            'UPDATE email_accounts SET last_sync_at = NOW() WHERE id = $1',
+            [account.id]
+          );
+          
+        } catch (error) {
+          logger.error(`Error syncing account ${account.id}:`, error);
+          results.errors.push({
+            accountId: account.id,
+            email: account.email_address,
+            error: error.message
+          });
+          results.accounts.push({
+            accountId: account.id,
+            email: account.email_address,
+            status: 'error',
+            error: error.message
+          });
+        }
+      }
+      
+      logger.info('Completed sync for all accounts', {
+        totalAccounts: activeAccounts.length,
+        totalSynced: results.totalSynced,
+        errors: results.errors.length
+      });
+      
+      return results;
+      
+    } catch (error) {
+      logger.error('Error in syncAllAccounts:', error);
       throw error;
     }
   }
@@ -203,36 +291,31 @@ class EmailService {
         access_token,
         refresh_token,
         token_expires_at,
-        display_name
+        status = 'active'
       } = accountData;
-      
-      // Validate that we have an email address
-      if (!email_address) {
-        logger.error('CRITICAL: createOrUpdateAccount called with null email_address', {
-          accountData: { ...accountData, access_token: '[REDACTED]', refresh_token: '[REDACTED]' }
-        });
-        throw new Error('Email address is required but was null or undefined');
-      }
-      
-      const result = await db.query(
-        `INSERT INTO email_accounts
-         (email_address, provider, access_token, refresh_token, token_expires_at, display_name, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active')
-         ON CONFLICT (email_address)
-         DO UPDATE SET
-           access_token = EXCLUDED.access_token,
-           refresh_token = EXCLUDED.refresh_token,
-           token_expires_at = EXCLUDED.token_expires_at,
-           display_name = EXCLUDED.display_name,
-           status = 'active',
-           updated_at = NOW()
-         RETURNING *`,
-        [email_address, provider, access_token, refresh_token, token_expires_at, display_name]
-      );
-      
-      logger.info('Account created/updated successfully:', { email_address, provider });
+
+      // Encrypt tokens
+      const encryptedAccessToken = encrypt(access_token);
+      const encryptedRefreshToken = encrypt(refresh_token);
+
+      const query = `
+        INSERT INTO email_accounts (email_address, provider, access_token, refresh_token, token_expires_at, status)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (email_address, provider) DO UPDATE
+        SET access_token = $3, refresh_token = $4, token_expires_at = $5, status = $6, updated_at = NOW()
+        RETURNING *
+      `;
+
+      const result = await db.query(query, [
+        email_address,
+        provider,
+        encryptedAccessToken,
+        encryptedRefreshToken,
+        token_expires_at,
+        status
+      ]);
+
       return result.rows[0];
-      
     } catch (error) {
       logger.error('Error creating/updating account:', error);
       throw error;
@@ -240,7 +323,7 @@ class EmailService {
   }
 
   /**
-   * Get a single account by its ID
+   * Get account by ID
    */
   async getAccountById(accountId) {
     return this.getAccounts(accountId);
