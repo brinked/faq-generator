@@ -18,9 +18,9 @@ router.get('/:faqId/sources', async (req, res) => {
       SELECT
         q.id as question_id,
         q.question_text,
-        e.sender_email,
-        e.sender_name,
-        e.subject as email_subject,
+        q.sender_email,
+        q.sender_name,
+        q.email_subject,
         q.confidence_score,
         q.created_at as question_created_at,
         e.received_at,
