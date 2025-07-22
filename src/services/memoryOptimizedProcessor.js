@@ -119,7 +119,7 @@ class MemoryOptimizedProcessor {
       // Mark email as processed (with column check)
       try {
         await db.query(
-          'UPDATE emails SET processed_for_faq = true, processed_at = NOW() WHERE id = $1',
+          'UPDATE emails SET is_processed = true, processed_for_faq = true, processed_at = NOW() WHERE id = $1',
           [emailId]
         );
       } catch (updateError) {
@@ -163,7 +163,8 @@ class MemoryOptimizedProcessor {
       try {
         await db.query(
           `UPDATE emails
-           SET processed_for_faq = true,
+           SET is_processed = true,
+               processed_for_faq = true,
                processed_at = NOW(),
                processing_error = $2
            WHERE id = $1`,
