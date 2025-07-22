@@ -197,7 +197,22 @@ class EmailService {
    */
   async createOrUpdateAccount(accountData) {
     try {
-      const { email, provider, accessToken, refreshToken, expiresAt, displayName } = accountData;
+      const {
+        email_address,
+        provider,
+        access_token,
+        refresh_token,
+        token_expires_at,
+        display_name
+      } = accountData;
+      
+      // Validate that we have an email address
+      if (!email_address) {
+        logger.error('CRITICAL: createOrUpdateAccount called with null email_address', {
+          accountData: { ...accountData, access_token: '[REDACTED]', refresh_token: '[REDACTED]' }
+        });
+        throw new Error('Email address is required but was null or undefined');
+      }
       
       const result = await db.query(
         `INSERT INTO email_accounts
@@ -212,10 +227,10 @@ class EmailService {
            status = 'active',
            updated_at = NOW()
          RETURNING *`,
-        [email, provider, accessToken, refreshToken, expiresAt, displayName]
+        [email_address, provider, access_token, refresh_token, token_expires_at, display_name]
       );
       
-      logger.info('Account created/updated successfully:', { email, provider });
+      logger.info('Account created/updated successfully:', { email_address, provider });
       return result.rows[0];
       
     } catch (error) {
