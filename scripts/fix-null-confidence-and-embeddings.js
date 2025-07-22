@@ -16,13 +16,12 @@ async function fixNullConfidenceAndEmbeddings() {
     console.log('📊 Step 1: Analyzing Data Corruption...\n');
     
     const dataAnalysisQuery = `
-      SELECT 
+      SELECT
         COUNT(*) as total_questions,
         COUNT(*) FILTER (WHERE confidence_score IS NULL) as null_confidence,
         COUNT(*) FILTER (WHERE confidence_score IS NOT NULL) as has_confidence,
         COUNT(*) FILTER (WHERE embedding IS NULL) as null_embedding,
         COUNT(*) FILTER (WHERE embedding IS NOT NULL) as has_embedding,
-        COUNT(*) FILTER (WHERE embedding = '[]'::vector) as empty_embedding,
         COUNT(*) FILTER (WHERE answer_text IS NOT NULL AND LENGTH(answer_text) > 10) as has_good_answer
       FROM questions
       WHERE is_customer_question = true;
@@ -36,7 +35,6 @@ async function fixNullConfidenceAndEmbeddings() {
     console.log(`   Valid Confidence Scores: ${stats.has_confidence}`);
     console.log(`   NULL Embeddings: ${stats.null_embedding}`);
     console.log(`   Has Embeddings: ${stats.has_embedding}`);
-    console.log(`   Empty Embeddings: ${stats.empty_embedding}`);
     console.log(`   Questions with Good Answers: ${stats.has_good_answer}`);
 
     // Step 2: Fix confidence scores using AI re-evaluation
@@ -123,8 +121,8 @@ async function fixNullConfidenceAndEmbeddings() {
     
     const nullEmbeddingQuery = `
       SELECT id, question_text
-      FROM questions 
-      WHERE (embedding IS NULL OR embedding = '[]'::vector)
+      FROM questions
+      WHERE embedding IS NULL
       AND is_customer_question = true
       AND confidence_score >= 0.3
       ORDER BY confidence_score DESC
