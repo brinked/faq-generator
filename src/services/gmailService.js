@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const logger = require('../utils/logger');
 const redisClient = require('../config/redis');
+const jwt = require('jsonwebtoken');
 
 class GmailService {
   constructor() {
@@ -220,7 +221,6 @@ class GmailService {
       try {
         const credentials = this.oauth2Client.credentials;
         if (credentials.id_token) {
-          const jwt = require('jsonwebtoken');
           const decoded = jwt.decode(credentials.id_token);
           
           logger.info('JWT token decoded:', {
