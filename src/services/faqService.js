@@ -14,15 +14,16 @@ class FAQService {
    * Generate FAQs from processed questions
    */
   async generateFAQs(options = {}, socket = null) {
+    let db;
     try {
       const {
-        minQuestionCount = 2,
-        maxFAQs = 100,
+        minQuestionCount = 1, // Reduced from 2 to be more permissive
+        maxFAQs = 10, // Reduced from 100 to prevent memory issues
         forceRegenerate = false,
         autoFix = true
       } = options;
 
-      logger.info('Starting FAQ generation process...');
+      logger.info('Starting FAQ generation process with memory optimization...');
       const startTime = Date.now();
 
       // Emit initial progress
@@ -34,7 +35,7 @@ class FAQService {
         });
       }
 
-      // Auto-fix NULL confidence scores and embeddings if enabled
+      // Auto-fix NULL confidence scores and embeddings if enabled (with limits)
       if (autoFix) {
         if (socket) {
           socket.emit('faq_generation_progress', {
@@ -43,7 +44,19 @@ class FAQService {
             progress: 10
           });
         }
-        await this.autoFixDataIssues(socket);
+        
+        try {
+          await this.autoFixDataIssues(socket);
+        } catch (autoFixError) {
+          logger.warn('Auto-fix failed, continuing with existing data:', autoFixError.message);
+          if (socket) {
+            socket.emit('faq_generation_progress', {
+              step: 'auto_fix_warning',
+              message: 'Auto-fix encountered issues, using existing data...',
+              progress: 25
+            });
+          }
+        }
       }
 
       // Get unprocessed questions with embeddings
@@ -856,7 +869,7 @@ class FAQService {
         WHERE q.confidence_score IS NULL
         AND q.is_customer_question = true
         ORDER BY q.created_at DESC
-        LIMIT 20
+        LIMIT 5
       `;
       
       const result = await db.query(nullConfidenceQuery);
@@ -947,7 +960,7 @@ class FAQService {
         AND is_customer_question = true
         AND confidence_score >= 0.3
         ORDER BY confidence_score DESC
-        LIMIT 20
+        LIMIT 5
       `;
       
       const result = await db.query(nullEmbeddingQuery);
@@ -1021,7 +1034,7 @@ class FAQService {
             SELECT 1 FROM question_groups qg WHERE qg.question_id = q.id
           )
         ORDER BY q.confidence_score DESC
-        LIMIT 10
+        LIMIT 5
       `;
       
       const result = await db.query(eligibleQuestionsQuery);
