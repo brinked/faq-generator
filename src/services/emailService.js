@@ -348,12 +348,7 @@ class EmailService {
       
       logger.info(`Starting deletion of account ${accountId}`);
       
-      // First, delete all emails associated with this account
-      const deleteEmailsQuery = 'DELETE FROM emails WHERE account_id = $1';
-      const emailsResult = await client.query(deleteEmailsQuery, [accountId]);
-      logger.info(`Deleted ${emailsResult.rowCount} emails for account ${accountId}`);
-      
-      // Delete all questions associated with emails from this account
+      // First, delete all questions associated with emails from this account
       const deleteQuestionsQuery = `
         DELETE FROM questions
         WHERE email_id IN (
@@ -362,6 +357,11 @@ class EmailService {
       `;
       const questionsResult = await client.query(deleteQuestionsQuery, [accountId]);
       logger.info(`Deleted ${questionsResult.rowCount} questions for account ${accountId}`);
+      
+      // Then, delete all emails associated with this account
+      const deleteEmailsQuery = 'DELETE FROM emails WHERE account_id = $1';
+      const emailsResult = await client.query(deleteEmailsQuery, [accountId]);
+      logger.info(`Deleted ${emailsResult.rowCount} emails for account ${accountId}`);
       
       // Finally, delete the account itself
       const deleteAccountQuery = 'DELETE FROM email_accounts WHERE id = $1 RETURNING email_address, provider';
