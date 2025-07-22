@@ -54,7 +54,35 @@ router.post('/run', async (req, res) => {
       });
     }
     
-    // Migration 2: Add FAQ group stats function
+    // Migration 2: Add missing questions columns
+    try {
+      const migrationPath = path.join(__dirname, '../../database/migrations/add_missing_questions_columns.sql');
+      
+      if (fs.existsSync(migrationPath)) {
+        const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+        await db.query(migrationSQL);
+        
+        results.push({
+          migration: 'add_missing_questions_columns.sql',
+          status: 'success',
+          message: 'Added missing columns to questions table'
+        });
+      } else {
+        results.push({
+          migration: 'add_missing_questions_columns.sql',
+          status: 'skipped',
+          message: 'Migration file not found'
+        });
+      }
+    } catch (error) {
+      results.push({
+        migration: 'add_missing_questions_columns.sql',
+        status: 'error',
+        message: error.message
+      });
+    }
+    
+    // Migration 3: Add FAQ group stats function
     try {
       const migrationPath = path.join(__dirname, '../../database/migrations/add_faq_group_stats_function.sql');
       
