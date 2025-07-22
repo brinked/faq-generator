@@ -250,6 +250,138 @@ router.post('/refresh/:accountId', async (req, res) => {
 });
 
 /**
+ * Generate FAQs from existing questions with auto-fix
+ */
+router.post('/generate-faqs', async (req, res) => {
+  try {
+    const {
+      minQuestionCount = 1,
+      maxFAQs = 20,
+      forceRegenerate = false,
+      autoFix = true
+    } = req.body;
+    
+    logger.info('FAQ generation triggered via API', {
+      minQuestionCount,
+      maxFAQs,
+      forceRegenerate,
+      autoFix
+    });
+    
+    // Import FAQ service
+    const FAQService = require('../services/faqService');
+    const faqService = new FAQService();
+    
+    // Start FAQ generation in background
+    const generationPromise = faqService.generateFAQs({
+      minQuestionCount,
+      maxFAQs,
+      forceRegenerate,
+      autoFix
+    });
+    
+    // Don't wait for completion, return immediately
+    res.json({
+      success: true,
+      message: 'FAQ generation started with auto-fix enabled',
+      options: {
+        minQuestionCount,
+        maxFAQs,
+        forceRegenerate,
+        autoFix
+      },
+      note: 'Generation is running in background. Check /api/faqs for results.'
+    });
+    
+    // Handle generation completion/failure in background
+    generationPromise
+      .then(result => {
+        logger.info('FAQ generation completed via API', result);
+        
+        // Emit socket event if available
+        if (req.io) {
+          req.io.emit('faq_generation_complete', {
+            success: true,
+            generated: result.generated || 0,
+            updated: result.updated || 0,
+            processed: result.processed || 0,
+            clusters: result.clusters || 0
+          });
+        }
+      })
+      .catch(error => {
+        logger.error('FAQ generation failed via API', error);
+        
+        // Emit socket event if available
+        if (req.io) {
+          req.io.emit('faq_generation_error', {
+            success: false,
+            error: error.message
+          });
+        }
+      });
+    
+  } catch (error) {
+    logger.error('Error triggering FAQ generation:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to trigger FAQ generation'
+    });
+  }
+});
+
+/**
+ * Get FAQ generation status
+ */
+router.get('/faq-status', async (req, res) => {
+  try {
+    const db = require('../config/database');
+    
+    // Get FAQ statistics
+    const statsQuery = `
+      SELECT
+        (SELECT COUNT(*) FROM questions WHERE is_customer_question = true) as total_questions,
+        (SELECT COUNT(*) FROM questions WHERE is_customer_question = true AND confidence_score >= 0.7) as eligible_questions,
+        (SELECT COUNT(*) FROM questions WHERE is_customer_question = true AND embedding IS NOT NULL) as questions_with_embeddings,
+        (SELECT COUNT(*) FROM questions WHERE is_customer_question = true AND confidence_score IS NULL) as null_confidence_questions,
+        (SELECT COUNT(*) FROM faq_groups) as total_faqs,
+        (SELECT COUNT(*) FROM faq_groups WHERE is_published = true) as published_faqs,
+        (SELECT AVG(question_count) FROM faq_groups) as avg_questions_per_faq
+    `;
+    
+    const result = await db.query(statsQuery);
+    const stats = result.rows[0];
+    
+    // Calculate processing progress
+    const totalQuestions = parseInt(stats.total_questions) || 0;
+    const eligibleQuestions = parseInt(stats.eligible_questions) || 0;
+    const processingProgress = totalQuestions > 0 ? Math.round((eligibleQuestions / totalQuestions) * 100) : 0;
+    
+    res.json({
+      success: true,
+      status: {
+        total_questions: totalQuestions,
+        eligible_questions: eligibleQuestions,
+        questions_with_embeddings: parseInt(stats.questions_with_embeddings) || 0,
+        null_confidence_questions: parseInt(stats.null_confidence_questions) || 0,
+        total_faqs: parseInt(stats.total_faqs) || 0,
+        published_faqs: parseInt(stats.published_faqs) || 0,
+        avg_questions_per_faq: parseFloat(stats.avg_questions_per_faq) || 0,
+        processing_progress: processingProgress,
+        needs_auto_fix: parseInt(stats.null_confidence_questions) > 0
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Error getting FAQ status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get FAQ status'
+    });
+  }
+});
+
+/**
  * Trigger FAQ generation for unprocessed emails - Memory Optimized
  */
 router.post('/process-faqs', async (req, res) => {

@@ -18,6 +18,8 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       socket.on('faq_processing_progress', handleProgressUpdate);
       socket.on('faq_processing_complete', handleProcessingComplete);
       socket.on('faq_processing_error', handleProcessingError);
+      socket.on('faq_generation_complete', handleFAQGenerationComplete);
+      socket.on('faq_generation_error', handleFAQGenerationError);
     }
 
     return () => {
@@ -25,6 +27,8 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
         socket.off('faq_processing_progress', handleProgressUpdate);
         socket.off('faq_processing_complete', handleProcessingComplete);
         socket.off('faq_processing_error', handleProcessingError);
+        socket.off('faq_generation_complete', handleFAQGenerationComplete);
+        socket.off('faq_generation_error', handleFAQGenerationError);
       }
     };
   }, [socket]);
@@ -72,6 +76,31 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
     toast.error(`FAQ processing failed: ${data.error}`);
   };
 
+  const handleFAQGenerationComplete = (data) => {
+    setProcessing(false);
+    setProgress(null);
+    addLog(`✅ FAQ generation complete!`);
+    addLog(`📚 Results: ${data.generated} FAQs generated, ${data.updated} FAQs updated`);
+    addLog(`📊 Processed ${data.processed} questions in ${data.clusters} clusters`);
+    
+    toast.success(`FAQ generation complete! Generated ${data.generated} FAQs and updated ${data.updated} existing ones.`);
+    
+    // Reload status
+    loadStatus();
+    
+    // Notify parent component
+    if (onProcessingComplete) {
+      onProcessingComplete(data);
+    }
+  };
+
+  const handleFAQGenerationError = (data) => {
+    setProcessing(false);
+    setProgress(null);
+    addLog(`❌ FAQ generation failed: ${data.error}`);
+    toast.error(`FAQ generation failed: ${data.error}`);
+  };
+
   const addLog = (message) => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prev => [...prev.slice(-50), `[${timestamp}] ${message}`]); // Keep last 50 logs
@@ -104,6 +133,40 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       setProcessing(false);
       addLog(`❌ Failed to start processing: ${error.message}`);
       toast.error(`Failed to start processing: ${error.message}`);
+    }
+  };
+
+  const generateFAQs = async () => {
+    try {
+      setProcessing(true);
+      setProgress(null);
+      addLog(`🧠 Starting FAQ generation with auto-fix...`);
+
+      const response = await fetch('/api/sync/generate-faqs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          minQuestionCount: 1,
+          maxFAQs: 20,
+          forceRegenerate: false,
+          autoFix: true
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        addLog(`✅ FAQ generation started with auto-fix enabled`);
+        toast.success('FAQ generation started! This will automatically fix any data issues.');
+      } else {
+        throw new Error(data.error || 'Failed to start FAQ generation');
+      }
+    } catch (error) {
+      setProcessing(false);
+      addLog(`❌ Failed to start FAQ generation: ${error.message}`);
+      toast.error(`Failed to start FAQ generation: ${error.message}`);
     }
   };
 
@@ -190,6 +253,14 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
             className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             {processing ? 'Processing...' : `Process All ${status.pending_emails} Emails`}
+          </button>
+          
+          <button
+            onClick={generateFAQs}
+            disabled={processing}
+            className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            {processing ? 'Generating...' : '🧠 Generate FAQs'}
           </button>
           
           <button
