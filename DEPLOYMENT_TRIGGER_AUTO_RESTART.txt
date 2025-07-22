@@ -1,0 +1,4 @@
+Auto-restart deployment trigger
+Generated: 2025-07-22T20:27:43.749Z
+Purpose: Force auto-deployment restart for FAQ generator script
+Commit hash will be updated automatically by git
