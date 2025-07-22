@@ -13,7 +13,7 @@ class FAQService {
   /**
    * Generate FAQs from processed questions
    */
-  async generateFAQs(options = {}) {
+  async generateFAQs(options = {}, socket = null) {
     try {
       const {
         minQuestionCount = 2,
@@ -25,21 +25,53 @@ class FAQService {
       logger.info('Starting FAQ generation process...');
       const startTime = Date.now();
 
+      // Emit initial progress
+      if (socket) {
+        socket.emit('faq_generation_progress', {
+          step: 'starting',
+          message: 'Starting FAQ generation process...',
+          progress: 0
+        });
+      }
+
       // Auto-fix NULL confidence scores and embeddings if enabled
       if (autoFix) {
-        await this.autoFixDataIssues();
+        if (socket) {
+          socket.emit('faq_generation_progress', {
+            step: 'auto_fix',
+            message: 'Running auto-fix for data issues...',
+            progress: 10
+          });
+        }
+        await this.autoFixDataIssues(socket);
       }
 
       // Get unprocessed questions with embeddings
+      if (socket) {
+        socket.emit('faq_generation_progress', {
+          step: 'loading_questions',
+          message: 'Loading questions for FAQ generation...',
+          progress: 30
+        });
+      }
+      
       const questions = await this.getQuestionsForFAQGeneration();
       
       if (questions.length === 0) {
         logger.info('No questions available for FAQ generation');
         
+        if (socket) {
+          socket.emit('faq_generation_progress', {
+            step: 'no_questions',
+            message: 'No eligible questions found, attempting direct FAQ creation...',
+            progress: 40
+          });
+        }
+        
         // If no questions after auto-fix, try the direct FAQ creation approach
         if (autoFix) {
           logger.info('Attempting direct FAQ creation from fixed data...');
-          const directResult = await this.createFAQsDirectly();
+          const directResult = await this.createFAQsDirectly(socket);
           return directResult;
         }
         
@@ -47,6 +79,14 @@ class FAQService {
       }
 
       logger.info(`Processing ${questions.length} questions for FAQ generation`);
+      
+      if (socket) {
+        socket.emit('faq_generation_progress', {
+          step: 'clustering',
+          message: `Clustering ${questions.length} questions by similarity...`,
+          progress: 50
+        });
+      }
 
       // Cluster similar questions
       const questionIds = questions.map(q => q.id);
@@ -56,13 +96,34 @@ class FAQService {
       const validClusters = clusters.filter(cluster => cluster.questions.length >= minQuestionCount);
       
       logger.info(`Created ${validClusters.length} valid clusters from ${clusters.length} total clusters`);
+      
+      if (socket) {
+        socket.emit('faq_generation_progress', {
+          step: 'generating_faqs',
+          message: `Creating FAQs from ${validClusters.length} question clusters...`,
+          progress: 60
+        });
+      }
 
       let generated = 0;
       let updated = 0;
+      const totalClusters = Math.min(validClusters.length, maxFAQs);
 
       // Process each cluster to create/update FAQs
-      for (const cluster of validClusters.slice(0, maxFAQs)) {
+      for (let i = 0; i < totalClusters; i++) {
+        const cluster = validClusters[i];
         try {
+          if (socket) {
+            const clusterProgress = 60 + Math.round((i / totalClusters) * 30);
+            socket.emit('faq_generation_progress', {
+              step: 'processing_cluster',
+              message: `Processing cluster ${i + 1}/${totalClusters}...`,
+              progress: clusterProgress,
+              current: i + 1,
+              total: totalClusters
+            });
+          }
+          
           const result = await this.processClusterToFAQ(cluster, questions, forceRegenerate);
           if (result.isNew) {
             generated++;
@@ -750,12 +811,29 @@ class FAQService {
   /**
    * Auto-fix NULL confidence scores and embeddings
    */
-  async autoFixDataIssues() {
+  async autoFixDataIssues(socket = null) {
     try {
       logger.info('Starting auto-fix for data issues...');
       
-      const fixedConfidence = await this.fixNullConfidenceScores();
-      const fixedEmbeddings = await this.fixNullEmbeddings();
+      if (socket) {
+        socket.emit('faq_generation_progress', {
+          step: 'auto_fix_confidence',
+          message: 'Fixing NULL confidence scores...',
+          progress: 15
+        });
+      }
+      
+      const fixedConfidence = await this.fixNullConfidenceScores(socket);
+      
+      if (socket) {
+        socket.emit('faq_generation_progress', {
+          step: 'auto_fix_embeddings',
+          message: 'Generating missing embeddings...',
+          progress: 25
+        });
+      }
+      
+      const fixedEmbeddings = await this.fixNullEmbeddings(socket);
       
       logger.info(`Auto-fix completed: ${fixedConfidence} confidence scores, ${fixedEmbeddings} embeddings fixed`);
       
@@ -769,7 +847,7 @@ class FAQService {
   /**
    * Fix NULL confidence scores using AI re-evaluation
    */
-  async fixNullConfidenceScores() {
+  async fixNullConfidenceScores(socket = null) {
     try {
       const nullConfidenceQuery = `
         SELECT q.id, q.question_text, q.answer_text, e.subject, e.body_text
@@ -792,7 +870,20 @@ class FAQService {
       
       let fixedCount = 0;
       
-      for (const question of questionsToFix) {
+      for (let i = 0; i < questionsToFix.length; i++) {
+        const question = questionsToFix[i];
+        
+        if (socket) {
+          const progress = 15 + Math.round((i / questionsToFix.length) * 8); // 15-23%
+          socket.emit('faq_generation_progress', {
+            step: 'fixing_confidence',
+            message: `Fixing confidence score ${i + 1}/${questionsToFix.length}...`,
+            progress: progress,
+            current: i + 1,
+            total: questionsToFix.length
+          });
+        }
+        
         try {
           const detection = await this.aiService.detectQuestions(
             question.body_text || '',
@@ -847,7 +938,7 @@ class FAQService {
   /**
    * Fix NULL embeddings
    */
-  async fixNullEmbeddings() {
+  async fixNullEmbeddings(socket = null) {
     try {
       const nullEmbeddingQuery = `
         SELECT id, question_text
@@ -870,7 +961,20 @@ class FAQService {
       
       let fixedCount = 0;
       
-      for (const question of questionsToFix) {
+      for (let i = 0; i < questionsToFix.length; i++) {
+        const question = questionsToFix[i];
+        
+        if (socket) {
+          const progress = 25 + Math.round((i / questionsToFix.length) * 5); // 25-30%
+          socket.emit('faq_generation_progress', {
+            step: 'fixing_embeddings',
+            message: `Generating embedding ${i + 1}/${questionsToFix.length}...`,
+            progress: progress,
+            current: i + 1,
+            total: questionsToFix.length
+          });
+        }
+        
         try {
           const embedding = await this.aiService.generateEmbedding(question.question_text);
           

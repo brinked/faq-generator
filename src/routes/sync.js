@@ -272,13 +272,13 @@ router.post('/generate-faqs', async (req, res) => {
     const FAQService = require('../services/faqService');
     const faqService = new FAQService();
     
-    // Start FAQ generation in background
+    // Start FAQ generation in background with socket for progress updates
     const generationPromise = faqService.generateFAQs({
       minQuestionCount,
       maxFAQs,
       forceRegenerate,
       autoFix
-    });
+    }, req.io);
     
     // Don't wait for completion, return immediately
     res.json({

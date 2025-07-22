@@ -18,6 +18,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       socket.on('faq_processing_progress', handleProgressUpdate);
       socket.on('faq_processing_complete', handleProcessingComplete);
       socket.on('faq_processing_error', handleProcessingError);
+      socket.on('faq_generation_progress', handleFAQGenerationProgress);
       socket.on('faq_generation_complete', handleFAQGenerationComplete);
       socket.on('faq_generation_error', handleFAQGenerationError);
     }
@@ -27,6 +28,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
         socket.off('faq_processing_progress', handleProgressUpdate);
         socket.off('faq_processing_complete', handleProcessingComplete);
         socket.off('faq_processing_error', handleProcessingError);
+        socket.off('faq_generation_progress', handleFAQGenerationProgress);
         socket.off('faq_generation_complete', handleFAQGenerationComplete);
         socket.off('faq_generation_error', handleFAQGenerationError);
       }
@@ -74,6 +76,17 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
     setProgress(null);
     addLog(`❌ Processing failed: ${data.error}`);
     toast.error(`FAQ processing failed: ${data.error}`);
+  };
+
+  const handleFAQGenerationProgress = (data) => {
+    setProgress({
+      step: data.step,
+      message: data.message,
+      progress: data.progress,
+      current: data.current || 0,
+      total: data.total || 100
+    });
+    addLog(`🔄 ${data.message} (${data.progress}%)`);
   };
 
   const handleFAQGenerationComplete = (data) => {
@@ -280,21 +293,40 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
           animate={{ opacity: 1, scale: 1 }}
           className="bg-blue-50 border border-blue-200 rounded-lg p-4"
         >
-          <h3 className="font-semibold text-blue-900 mb-2">Processing in Progress</h3>
+          <h3 className="font-semibold text-blue-900 mb-2">
+            {progress.step === 'starting' && '🚀 Starting FAQ Generation'}
+            {progress.step === 'auto_fix' && '🔧 Auto-Fix in Progress'}
+            {progress.step === 'auto_fix_confidence' && '🧠 Fixing Confidence Scores'}
+            {progress.step === 'fixing_confidence' && '🧠 AI Re-evaluation'}
+            {progress.step === 'auto_fix_embeddings' && '🔗 Generating Embeddings'}
+            {progress.step === 'fixing_embeddings' && '🔗 Creating Vector Embeddings'}
+            {progress.step === 'loading_questions' && '📋 Loading Questions'}
+            {progress.step === 'clustering' && '🔍 Clustering Similar Questions'}
+            {progress.step === 'generating_faqs' && '📚 Creating FAQ Groups'}
+            {progress.step === 'processing_cluster' && '⚙️ Processing Question Clusters'}
+            {!progress.step && 'Processing in Progress'}
+          </h3>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>Email {progress.current} of {progress.total}</span>
-              <span>{Math.round((progress.current / progress.total) * 100)}%</span>
+              <span>{progress.message}</span>
+              <span className="font-semibold">{progress.progress}%</span>
             </div>
-            <div className="w-full bg-blue-200 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(progress.current / progress.total) * 100}%` }}
+            <div className="w-full bg-blue-200 rounded-full h-3">
+              <div
+                className="bg-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progress.progress}%` }}
               ></div>
             </div>
-            <div className="text-xs text-blue-700">
-              Questions found: {progress.questions} | Errors: {progress.errors}
-            </div>
+            {progress.current && progress.total && (
+              <div className="text-xs text-blue-700">
+                Progress: {progress.current}/{progress.total} items
+              </div>
+            )}
+            {progress.questions && (
+              <div className="text-xs text-blue-700">
+                Questions found: {progress.questions} | Errors: {progress.errors}
+              </div>
+            )}
             {progress.currentEmail && (
               <div className="text-xs text-blue-600 truncate">
                 Current: {progress.currentEmail}
