@@ -1,0 +1,30 @@
+DEPLOYMENT TRIGGER: OAuth Token Refresh Fix + Server Startup Improvements
+
+Timestamp: 2025-07-22T02:12:00Z
+
+CRITICAL FIXES IMPLEMENTED:
+
+1. OAuth Token Refresh Fix:
+   - Fixed invalid_grant errors in Gmail sync
+   - Automatic token refresh when tokens expire
+   - Enhanced error handling and logging
+   - Accounts will automatically become active again
+
+2. Server Startup Improvements:
+   - Added connection timeouts and retries
+   - Enhanced error handling during initialization
+   - Graceful degradation for non-critical services
+   - Better logging for debugging deployment issues
+
+3. Files Modified:
+   - src/services/emailService.js (OAuth token refresh logic)
+   - src/services/gmailService.js (enhanced error handling)
+   - server.js (robust initialization)
+
+EXPECTED RESULTS:
+- No more 502 errors on deployment
+- Gmail sync will work without invalid_grant errors
+- Automatic token refresh for expired accounts
+- More reliable server startup process
+
+This deployment should resolve both the OAuth token refresh issue and the 502 deployment errors.

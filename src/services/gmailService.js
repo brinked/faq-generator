@@ -118,15 +118,35 @@ class GmailService {
    */
   async refreshAccessToken(refreshToken) {
     try {
+      logger.info('Attempting to refresh Gmail access token');
+      
       this.oauth2Client.setCredentials({
         refresh_token: refreshToken
       });
 
       const { credentials } = await this.oauth2Client.refreshAccessToken();
+      
+      logger.info('Successfully refreshed Gmail access token', {
+        hasAccessToken: !!credentials.access_token,
+        hasRefreshToken: !!credentials.refresh_token,
+        expiryDate: credentials.expiry_date
+      });
+      
       return credentials;
     } catch (error) {
-      logger.error('Error refreshing Gmail access token:', error);
-      throw new Error('Failed to refresh access token');
+      logger.error('Error refreshing Gmail access token:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        stack: error.stack
+      });
+      
+      // Check if it's a permanent failure
+      if (error.response?.data?.error === 'invalid_grant') {
+        throw new Error('Refresh token is invalid or expired. User needs to re-authenticate.');
+      }
+      
+      throw new Error(`Failed to refresh access token: ${error.message}`);
     }
   }
 
@@ -207,8 +227,20 @@ class GmailService {
 
       return response.data;
     } catch (error) {
-      logger.error('Error getting Gmail messages:', error);
-      throw new Error('Failed to get messages');
+      logger.error('Error getting Gmail messages:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      // Preserve the original error for upstream handling
+      const enhancedError = new Error(`Failed to get messages: ${error.message}`);
+      enhancedError.originalError = error;
+      enhancedError.code = error.code;
+      enhancedError.response = error.response;
+      
+      throw enhancedError;
     }
   }
 

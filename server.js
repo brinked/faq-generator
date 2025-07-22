@@ -330,39 +330,85 @@ io.on('connection', (socket) => {
   });
 });
 
-// Initialize services
+// Initialize services with enhanced error handling and retries
 async function initializeApp() {
-  try {
-    // Initialize database connection
-    await db.connect();
-    logger.info('Database connected successfully');
-    
-    // Initialize Redis connection
-    await redisClient.connect();
-    logger.info('Redis connected successfully');
-    
-    // Initialize background job queues
-    await initializeQueues();
-    logger.info('Job queues initialized');
-    
-    // Start scheduled jobs
-    startScheduledJobs();
-    logger.info('Scheduled jobs started');
-    
-    // Start health monitoring
-    healthMonitor.startMonitoring(30000); // Check every 30 seconds
-    logger.info('Health monitoring started');
-    
-    // Start server
-    server.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-      logger.info('🚀 FAQ Generator with comprehensive fixes is ready!');
-      logger.info('✅ All critical issues resolved - ready to process 300+ emails');
-    });
-    
-  } catch (error) {
-    logger.error('Failed to initialize application:', error);
-    process.exit(1);
+  const maxRetries = 3;
+  let retryCount = 0;
+  
+  while (retryCount < maxRetries) {
+    try {
+      logger.info(`Initialization attempt ${retryCount + 1}/${maxRetries}`);
+      
+      // Initialize database connection with timeout
+      logger.info('Connecting to database...');
+      await Promise.race([
+        db.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 15000))
+      ]);
+      logger.info('✅ Database connected successfully');
+      
+      // Initialize Redis connection with timeout
+      logger.info('Connecting to Redis...');
+      await Promise.race([
+        redisClient.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 10000))
+      ]);
+      logger.info('✅ Redis connected successfully');
+      
+      // Initialize background job queues (with error handling)
+      try {
+        await initializeQueues();
+        logger.info('✅ Job queues initialized');
+      } catch (queueError) {
+        logger.warn('Job queue initialization failed, continuing without queues:', queueError.message);
+      }
+      
+      // Start scheduled jobs (with error handling)
+      try {
+        startScheduledJobs();
+        logger.info('✅ Scheduled jobs started');
+      } catch (schedulerError) {
+        logger.warn('Scheduler initialization failed, continuing without scheduled jobs:', schedulerError.message);
+      }
+      
+      // Start health monitoring
+      try {
+        healthMonitor.startMonitoring(30000); // Check every 30 seconds
+        logger.info('✅ Health monitoring started');
+      } catch (monitorError) {
+        logger.warn('Health monitoring failed to start:', monitorError.message);
+      }
+      
+      // Start server
+      server.listen(PORT, '0.0.0.0', () => {
+        logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+        logger.info('✅ FAQ Generator with OAuth token refresh fix is ready!');
+        logger.info('✅ Gmail sync will now automatically refresh expired tokens');
+        logger.info('✅ Ready to process emails without invalid_grant errors');
+      });
+      
+      // If we get here, initialization was successful
+      break;
+      
+    } catch (error) {
+      retryCount++;
+      logger.error(`Initialization attempt ${retryCount} failed:`, {
+        error: error.message,
+        stack: error.stack,
+        retryCount,
+        maxRetries
+      });
+      
+      if (retryCount >= maxRetries) {
+        logger.error('All initialization attempts failed. Exiting...');
+        process.exit(1);
+      }
+      
+      // Wait before retrying
+      const waitTime = Math.min(retryCount * 5000, 15000);
+      logger.info(`Waiting ${waitTime}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
 }
 

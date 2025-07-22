@@ -132,9 +132,39 @@ class EmailService {
       return { synced: syncResult.processed };
     } catch (error) {
       if (error.originalError?.response?.data?.error === 'invalid_grant') {
-        logger.warn(`Account ${account.id} has an invalid grant. Marking as expired.`);
-        await this.updateAccountStatus(account.id, 'expired');
-        throw new Error('Account token has expired. Please reconnect the account.');
+        logger.warn(`Account ${account.id} has an invalid grant. Attempting token refresh.`);
+        
+        try {
+          // Attempt to refresh the token
+          const newCredentials = await gmailService.refreshAccessToken(account.refresh_token);
+          
+          if (newCredentials && newCredentials.access_token) {
+            logger.info(`Successfully refreshed token for account ${account.id}`);
+            
+            // Update the account with new credentials
+            await this.updateAccountTokens(account.id, {
+              access_token: newCredentials.access_token,
+              refresh_token: newCredentials.refresh_token || account.refresh_token,
+              token_expires_at: newCredentials.expiry_date
+            });
+            
+            // Set the new credentials and retry the sync
+            gmailService.setCredentials(newCredentials);
+            const syncResult = await gmailService.syncEmails(account.id, { maxEmails });
+            
+            if (syncResult.messages && syncResult.messages.length > 0) {
+              await this.saveEmails(account.id, syncResult.messages);
+            }
+            
+            return { synced: syncResult.processed };
+          } else {
+            throw new Error('Token refresh returned invalid credentials');
+          }
+        } catch (refreshError) {
+          logger.error(`Failed to refresh token for account ${account.id}:`, refreshError);
+          await this.updateAccountStatus(account.id, 'expired');
+          throw new Error('Account token has expired and could not be refreshed. Please reconnect the account.');
+        }
       }
       throw error;
     }
@@ -261,6 +291,51 @@ class EmailService {
     `;
     const result = await db.query(query, [status, accountId]);
     return result.rows[0];
+  }
+
+  /**
+   * Update account tokens after refresh
+   */
+  async updateAccountTokens(accountId, tokens) {
+    try {
+      const encryptedAccessToken = encrypt(tokens.access_token);
+      const encryptedRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : null;
+      
+      const query = `
+        UPDATE email_accounts
+        SET
+          access_token = $1,
+          refresh_token = COALESCE($2, refresh_token),
+          token_expires_at = $3,
+          status = 'active',
+          updated_at = NOW()
+        WHERE id = $4
+        RETURNING id, email_address, provider, status
+      `;
+      
+      const result = await db.query(query, [
+        encryptedAccessToken,
+        encryptedRefreshToken,
+        tokens.token_expires_at ? new Date(tokens.token_expires_at) : null,
+        accountId
+      ]);
+      
+      if (result.rows.length === 0) {
+        throw new Error(`Account ${accountId} not found`);
+      }
+      
+      logger.info(`Updated tokens for account ${accountId}`, {
+        accountId,
+        hasAccessToken: !!tokens.access_token,
+        hasRefreshToken: !!tokens.refresh_token,
+        expiresAt: tokens.token_expires_at
+      });
+      
+      return result.rows[0];
+    } catch (error) {
+      logger.error(`Error updating tokens for account ${accountId}:`, error);
+      throw error;
+    }
   }
 }
 
