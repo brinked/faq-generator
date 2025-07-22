@@ -50,41 +50,19 @@ class MemoryOptimizedProcessor {
       external: Math.round(memUsage.external / 1024 / 1024)
     });
     
-    // Keep only last 10 memory readings
-    if (this.stats.memoryPeaks.length > 10) {
-      this.stats.memoryPeaks = this.stats.memoryPeaks.slice(-10);
-    }
+    logger.info(`💾 Memory usage: ${Math.round(heapUsed / 1024 / 1024)}MB / ${Math.round(heapTotal / 1024 / 1024)}MB`);
     
-    // Force garbage collection if memory usage is high
-    if (heapUsed > this.memoryThreshold) {
-      logger.warn(`High memory usage detected: ${Math.round(heapUsed / 1024 / 1024)}MB. Forcing garbage collection.`);
-      this.forceGarbageCollection();
-      return true;
-    }
-    
-    return false;
-  }
-
-  /**
-   * Force garbage collection and log results
-   */
-  forceGarbageCollection() {
-    const beforeGC = process.memoryUsage();
-    
-    if (global.gc) {
+    // Force garbage collection if approaching threshold
+    if (heapUsed > this.memoryThreshold && global.gc) {
+      logger.warn('⚠️  Memory threshold exceeded, forcing garbage collection');
       global.gc();
-      const afterGC = process.memoryUsage();
-      
-      const freedMemory = beforeGC.heapUsed - afterGC.heapUsed;
-      logger.info(`Garbage collection completed. Freed ${Math.round(freedMemory / 1024 / 1024)}MB`, {
-        before: Math.round(beforeGC.heapUsed / 1024 / 1024),
-        after: Math.round(afterGC.heapUsed / 1024 / 1024)
-      });
-      
       this.stats.lastGC = new Date();
-    } else {
-      logger.warn('Garbage collection not available. Start server with --expose-gc flag.');
+      
+      // Give GC time to complete
+      return new Promise(resolve => setTimeout(resolve, 100));
     }
+    
+    return Promise.resolve();
   }
 
   /**
@@ -92,21 +70,32 @@ class MemoryOptimizedProcessor {
    */
   async processEmailSafely(email, batchIndex, emailIndex) {
     const emailId = email.id;
-    let result = null;
+    const globalIndex = batchIndex * this.maxBatchSize + emailIndex + 1;
     
     try {
-      // Check memory before processing
-      this.checkMemoryUsage();
+      logger.info(`📧 Processing email ${globalIndex}: ${email.subject || 'No subject'}`);
+      
+      // Check if already processed
+      const existingQuestions = await db.query(
+        'SELECT COUNT(*) as count FROM questions WHERE email_id = $1',
+        [emailId]
+      );
+      
+      if (existingQuestions.rows[0].count > 0) {
+        logger.info(`✅ Email ${emailId} already processed, skipping`);
+        this.stats.processed++;
+        return { emailId, status: 'skipped', reason: 'already_processed' };
+      }
       
       // Create timeout promise
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email processing timeout')), this.processingTimeout);
+        setTimeout(() => reject(new Error('Processing timeout')), this.processingTimeout);
       });
       
-      // Limit email content to prevent memory issues
+      // Prepare email data with memory limits
       const limitedEmail = {
         id: email.id,
-        subject: (email.subject || '').substring(0, 300),
+        subject: email.subject,
         body_text: (email.body_text || '').substring(0, 8000), // Reduced from 10000
         sender_email: email.sender_email,
         sender_name: email.sender_name
@@ -128,153 +117,123 @@ class MemoryOptimizedProcessor {
       }
       
       // Mark email as processed
-      await this.emailService.markEmailProcessed(emailId, 'completed');
+      await db.query(
+        'UPDATE emails SET processed_for_faq = true, processed_at = NOW() WHERE id = $1',
+        [emailId]
+      );
       
       this.stats.processed++;
       this.consecutiveErrors = 0; // Reset consecutive error counter
       
-      logger.info(`✅ Email ${emailIndex + 1} processed successfully. Questions: ${result.questions?.length || 0}`);
+      logger.info(`✅ Successfully processed email ${emailId}: ${result.questions.length} questions found`);
       
       return {
-        success: true,
         emailId,
-        questionsFound: result.questions?.length || 0
+        status: 'success',
+        questionsFound: result.questions.length,
+        hasQuestions: result.hasQuestions
       };
       
     } catch (error) {
+      this.stats.errors++;
       this.consecutiveErrors++;
       this.totalErrors++;
-      this.stats.errors++;
       
       logger.error(`❌ Error processing email ${emailId}:`, {
         error: error.message,
+        stack: error.stack,
         consecutiveErrors: this.consecutiveErrors,
-        totalErrors: this.totalErrors,
-        batchIndex,
-        emailIndex
+        totalErrors: this.totalErrors
       });
       
-      // Mark email as failed
-      try {
-        await this.emailService.markEmailProcessed(emailId, 'failed', error.message);
-      } catch (markError) {
-        logger.error('Failed to mark email as failed:', markError);
+      // Mark as processed with error
+      await db.query(
+        `UPDATE emails 
+         SET processed_for_faq = true, 
+             processed_at = NOW(),
+             processing_error = $2
+         WHERE id = $1`,
+        [emailId, error.message]
+      );
+      
+      // Check circuit breaker
+      if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+        throw new Error(`Circuit breaker triggered: ${this.consecutiveErrors} consecutive errors`);
+      }
+      
+      if (this.totalErrors >= this.maxTotalErrors) {
+        throw new Error(`Maximum error threshold reached: ${this.totalErrors} total errors`);
       }
       
       return {
-        success: false,
         emailId,
+        status: 'error',
         error: error.message
       };
-    } finally {
-      // Clear references to help garbage collection
-      result = null;
-      email = null;
     }
   }
 
   /**
-   * Store questions with optimized memory usage
+   * Optimized question storage with minimal memory footprint
    */
-  async storeQuestionsOptimized(emailId, questions, emailData) {
-    const batchSize = 5; // Process questions in small batches
-    
-    for (let i = 0; i < questions.length; i += batchSize) {
-      const questionBatch = questions.slice(i, i + batchSize);
-      
-      // Generate embeddings for batch (if needed)
-      const questionTexts = questionBatch.map(q => q.question);
-      let embeddings = [];
-      
-      try {
-        if (questionTexts.length > 0) {
-          embeddings = await this.aiService.generateEmbeddingsBatch(questionTexts);
-        }
-      } catch (embeddingError) {
-        logger.warn('Embedding generation failed, storing without embeddings:', embeddingError.message);
-        embeddings = new Array(questionTexts.length).fill(null);
-      }
-      
-      // Insert questions
-      const values = [];
-      const placeholders = [];
-      
-      questionBatch.forEach((question, index) => {
-        const baseIndex = values.length;
-        placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9})`);
-        values.push(
-          emailId,
-          question.question,
-          question.answer || '',
-          question.confidence || 0.8,
-          index + 1,
-          embeddings[index] ? JSON.stringify(embeddings[index]) : null,
-          true, // is_customer_question
-          emailData.sender_email,
-          emailData.subject
-        );
-      });
-      
-      if (values.length > 0) {
-        const insertQuery = `
-          INSERT INTO questions (
-            email_id, question_text, answer_text, confidence_score, 
-            position_in_email, embedding_vector, is_customer_question,
-            sender_email, email_subject
-          ) VALUES ${placeholders.join(', ')}
-          ON CONFLICT (email_id, question_text) DO NOTHING
-        `;
-        
-        await db.query(insertQuery, values);
-      }
-      
-      // Clear references
-      questionBatch.length = 0;
-      embeddings.length = 0;
-    }
-  }
-
-  /**
-   * Check if processing should continue based on circuit breaker logic
-   */
-  shouldContinueProcessing() {
-    if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
-      logger.error(`🚨 Circuit breaker: ${this.consecutiveErrors} consecutive errors. Stopping to prevent server crash.`);
-      return false;
-    }
-    
-    if (this.totalErrors >= this.maxTotalErrors) {
-      logger.error(`🚨 Circuit breaker: ${this.totalErrors} total errors. Stopping to prevent server crash.`);
-      return false;
-    }
-    
-    // Check memory usage
-    const memUsage = process.memoryUsage();
-    if (memUsage.heapUsed > this.memoryThreshold) {
-      logger.error(`🚨 Memory threshold exceeded: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB. Stopping processing.`);
-      return false;
-    }
-    
-    return true;
-  }
-
-  /**
-   * Main processing method optimized for memory constraints
-   */
-  async processEmails(emails, io = null) {
-    this.stats.startTime = new Date();
-    logger.info(`🚀 Starting memory-optimized processing of ${emails.length} emails`);
-    
-    const totalBatches = Math.ceil(emails.length / this.maxBatchSize);
-    let processedEmails = [];
+  async storeQuestionsOptimized(emailId, questions, email) {
+    const client = await db.getClient();
     
     try {
+      await client.query('BEGIN');
+      
+      for (const q of questions) {
+        // Store with minimal data
+        await client.query(
+          `INSERT INTO questions 
+           (email_id, question_text, answer_text, confidence, category, 
+            sender_email, sender_name, detected_at, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
+           ON CONFLICT (email_id, question_text) DO UPDATE
+           SET answer_text = EXCLUDED.answer_text,
+               confidence = EXCLUDED.confidence,
+               updated_at = NOW()`,
+          [
+            emailId,
+            q.question.substring(0, 500), // Limit question length
+            q.answer ? q.answer.substring(0, 2000) : null, // Limit answer length
+            q.confidence || 0.5,
+            q.category || 'general',
+            email.sender_email,
+            email.sender_name,
+            JSON.stringify({
+              context: q.context ? q.context.substring(0, 500) : null,
+              isFromCustomer: q.isFromCustomer !== false
+            })
+          ]
+        );
+      }
+      
+      await client.query('COMMIT');
+      logger.info(`💾 Stored ${questions.length} questions for email ${emailId}`);
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Failed to store questions:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Process emails in memory-optimized batches
+   */
+  async processEmails(emails, io = null) {
+    logger.info(`🚀 Starting memory-optimized processing of ${emails.length} emails`);
+    
+    this.stats.startTime = new Date();
+    const processedEmails = [];
+    const totalBatches = Math.ceil(emails.length / this.maxBatchSize);
+    
+    try {
+      // Process in small batches
       for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-        // Check if we should continue processing
-        if (!this.shouldContinueProcessing()) {
-          break;
-        }
-        
         const batchStart = batchIndex * this.maxBatchSize;
         const batchEnd = Math.min(batchStart + this.maxBatchSize, emails.length);
         const emailBatch = emails.slice(batchStart, batchEnd);
@@ -287,69 +246,67 @@ class MemoryOptimizedProcessor {
           const result = await this.processEmailSafely(email, batchIndex, emailIndex);
           processedEmails.push(result);
           
-          // Emit progress update
+          // Emit progress update with correct field names for frontend
           if (io) {
             io.emit('faq_processing_progress', {
-              processed: this.stats.processed,
+              current: this.stats.processed,  // Changed from 'processed'
               total: emails.length,
-              questionsFound: this.stats.questionsFound,
+              questions: this.stats.questionsFound,  // Changed from 'questionsFound'
               errors: this.stats.errors,
+              currentEmail: email.subject || 'Processing...',
               currentBatch: batchIndex + 1,
               totalBatches
             });
           }
-          
-          // Small delay to prevent overwhelming the system
-          await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        // Force garbage collection every few batches
-        if ((batchIndex + 1) % this.gcInterval === 0) {
-          this.forceGarbageCollection();
-        }
+        // Memory management between batches
+        await this.checkMemoryUsage();
         
-        // Longer delay between batches to allow system recovery
-        if (batchIndex < totalBatches - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
+        // Force GC every N batches
+        if ((batchIndex + 1) % this.gcInterval === 0 && global.gc) {
+          logger.info('🧹 Scheduled garbage collection');
+          global.gc();
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
-        
-        // Clear batch references
-        emailBatch.length = 0;
       }
       
       // Final statistics
-      const duration = Date.now() - this.stats.startTime.getTime();
-      const finalStats = {
-        ...this.stats,
-        duration: `${Math.round(duration / 1000)}s`,
-        successRate: this.stats.processed > 0 ? Math.round((this.stats.processed / (this.stats.processed + this.stats.errors)) * 100) : 0,
-        avgQuestionsPerEmail: this.stats.processed > 0 ? Math.round(this.stats.questionsFound / this.stats.processed * 100) / 100 : 0
+      const processingTime = new Date() - this.stats.startTime;
+      const summary = {
+        totalEmails: emails.length,
+        processed: this.stats.processed,
+        questionsFound: this.stats.questionsFound,
+        errors: this.stats.errors,
+        processingTimeMs: processingTime,
+        processingTimeSec: Math.round(processingTime / 1000),
+        avgTimePerEmail: Math.round(processingTime / emails.length),
+        memoryPeaks: this.stats.memoryPeaks.slice(-5), // Last 5 peaks
+        success: this.stats.errors === 0
       };
       
-      logger.info('🎉 Memory-optimized processing completed:', finalStats);
+      logger.info('✅ Processing complete:', summary);
       
+      // Emit completion event
       if (io) {
-        io.emit('faq_processing_complete', finalStats);
+        io.emit('faq_processing_complete', summary);
       }
       
-      return finalStats;
+      return summary;
       
     } catch (error) {
-      logger.error('❌ Fatal error in memory-optimized processing:', error);
+      logger.error('❌ Fatal error during batch processing:', error);
       
+      // Emit error event
       if (io) {
         io.emit('faq_processing_error', {
           error: error.message,
-          stats: this.stats
+          processed: this.stats.processed,
+          errors: this.stats.errors
         });
       }
       
       throw error;
-    } finally {
-      // Final cleanup
-      processedEmails = null;
-      emails = null;
-      this.forceGarbageCollection();
     }
   }
 }
