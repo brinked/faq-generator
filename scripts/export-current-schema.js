@@ -39,9 +39,9 @@ async function exportCurrentSchema() {
     
     // Get all tables with their complete definitions
     const tablesResult = await client.query(`
-      SELECT schemaname, tablename 
-      FROM pg_tables 
-      WHERE schemaname = 'public' 
+      SELECT 'public' as schemaname, tablename
+      FROM pg_tables
+      WHERE schemaname = 'public'
       ORDER BY tablename
     `);
     
@@ -50,12 +50,12 @@ async function exportCurrentSchema() {
       
       // Get CREATE TABLE statement
       const createTableResult = await client.query(`
-        SELECT 
-          'CREATE TABLE ' || schemaname || '.' || tablename || ' (' || 
+        SELECT
+          'CREATE TABLE public.' || table_name || ' (' ||
           array_to_string(
             array_agg(
-              column_name || ' ' || 
-              CASE 
+              column_name || ' ' ||
+              CASE
                 WHEN data_type = 'character varying' THEN 'VARCHAR(' || character_maximum_length || ')'
                 WHEN data_type = 'character' THEN 'CHAR(' || character_maximum_length || ')'
                 WHEN data_type = 'numeric' THEN 'NUMERIC(' || numeric_precision || ',' || numeric_scale || ')'
@@ -65,12 +65,12 @@ async function exportCurrentSchema() {
               CASE WHEN is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END ||
               CASE WHEN column_default IS NOT NULL THEN ' DEFAULT ' || column_default ELSE '' END
               ORDER BY ordinal_position
-            ), 
+            ),
             ', '
           ) || ');' as create_statement
-        FROM information_schema.columns 
+        FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = $1
-        GROUP BY schemaname, tablename
+        GROUP BY table_name
       `, [table.tablename]);
       
       if (createTableResult.rows.length > 0) {
@@ -123,12 +123,12 @@ async function exportCurrentSchema() {
     
     // Get all indexes
     const indexesResult = await client.query(`
-      SELECT 
-        schemaname,
+      SELECT
+        'public' as schemaname,
         tablename,
         indexname,
         indexdef
-      FROM pg_indexes 
+      FROM pg_indexes
       WHERE schemaname = 'public'
         AND indexname NOT LIKE '%_pkey'  -- Exclude primary key indexes
       ORDER BY tablename, indexname
