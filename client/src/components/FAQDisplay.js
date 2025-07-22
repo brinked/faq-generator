@@ -198,7 +198,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
       const sources = await apiService.getFAQSources(faq.id);
       setSelectedFAQSources({
         faq: faq,
-        sources: sources.sources || []
+        sources: sources.emailSources || []
       });
       setShowSourcesModal(true);
     } catch (error) {
