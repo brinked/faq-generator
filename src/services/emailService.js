@@ -141,7 +141,21 @@ class EmailService {
       expiry_date: account.token_expires_at
     });
 
-    const syncResult = await gmailService.syncEmails(account.id, { maxEmails });
+    try {
+      const syncResult = await gmailService.syncEmails(account.id, { maxEmails });
+      
+      if (syncResult.messages && syncResult.messages.length > 0) {
+        await this.saveEmails(account.id, syncResult.messages);
+      }
+      
+      return { synced: syncResult.processed };
+    } catch (error) {
+      if (error.message.includes('invalid_grant')) {
+        logger.warn(`Account ${account.id} has an invalid grant. Marking as expired.`);
+        await this.updateAccountStatus(account.id, 'expired');
+      }
+      throw error;
+    }
     
     if (syncResult.messages && syncResult.messages.length > 0) {
       await this.saveEmails(account.id, syncResult.messages);
@@ -249,6 +263,37 @@ class EmailService {
     } finally {
       client.release();
     }
+  }
+  /**
+   * Get statistics for a single account
+   */
+  async getAccountStats(accountId) {
+    const statsQuery = `
+      SELECT
+        COUNT(*) AS total_emails,
+        COUNT(*) FILTER (WHERE is_processed = true) AS processed_emails,
+        COUNT(*) FILTER (WHERE is_processed = false) AS pending_emails,
+        MAX(received_at) AS latest_email,
+        MIN(received_at) AS oldest_email
+      FROM emails
+      WHERE account_id = $1
+    `;
+    const result = await db.query(statsQuery, [accountId]);
+    return result.rows[0];
+  }
+
+  /**
+   * Update the status of an account
+   */
+  async updateAccountStatus(accountId, status) {
+    const query = `
+      UPDATE email_accounts
+      SET status = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `;
+    const result = await db.query(query, [status, accountId]);
+    return result.rows[0];
   }
 }
 
