@@ -150,18 +150,12 @@ class EmailService {
       
       return { synced: syncResult.processed };
     } catch (error) {
-      if (error.message.includes('invalid_grant')) {
+      if (error.message && error.message.includes('invalid_grant')) {
         logger.warn(`Account ${account.id} has an invalid grant. Marking as expired.`);
         await this.updateAccountStatus(account.id, 'expired');
       }
       throw error;
     }
-    
-    if (syncResult.messages && syncResult.messages.length > 0) {
-      await this.saveEmails(account.id, syncResult.messages);
-    }
-    
-    return { synced: syncResult.processed };
   }
 
   /**
