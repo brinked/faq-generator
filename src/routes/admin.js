@@ -350,7 +350,7 @@ router.post('/force-sync/:accountId', async (req, res) => {
     logger.error(`Error in forced sync:`, error);
     res.status(500).json({
       success: false,
-      error: 'Failed to force sync emails'
+      error: error.message || 'Failed to force sync emails'
     });
   }
 });

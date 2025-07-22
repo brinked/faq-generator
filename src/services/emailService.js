@@ -13,7 +13,6 @@ class EmailService {
    */
   async getEmailsForProcessing(limit = 100, offset = 0) {
     try {
-      // First check if the column exists
       const columnCheck = await db.query(`
         SELECT column_name 
         FROM information_schema.columns 
@@ -23,20 +22,11 @@ class EmailService {
       
       let query;
       if (columnCheck.rows.length > 0) {
-        // Column exists, use it
         query = `
           SELECT 
-            e.id,
-            e.account_id,
-            e.message_id,
-            e.thread_id,
-            e.subject,
-            e.body_text,
-            e.sender_email,
-            e.sender_name,
-            e.received_at,
-            ea.email_address as account_email,
-            ea.provider
+            e.id, e.account_id, e.message_id, e.thread_id, e.subject,
+            e.body_text, e.sender_email, e.sender_name, e.received_at,
+            ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
           WHERE e.processed_for_faq = false
@@ -46,21 +36,12 @@ class EmailService {
           LIMIT $1 OFFSET $2
         `;
       } else {
-        // Column doesn't exist, use alternative query
         logger.warn('Column processed_for_faq does not exist, using fallback query');
         query = `
           SELECT 
-            e.id,
-            e.account_id,
-            e.message_id,
-            e.thread_id,
-            e.subject,
-            e.body_text,
-            e.sender_email,
-            e.sender_name,
-            e.received_at,
-            ea.email_address as account_email,
-            ea.provider
+            e.id, e.account_id, e.message_id, e.thread_id, e.subject,
+            e.body_text, e.sender_email, e.sender_name, e.received_at,
+            ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
           WHERE e.body_text IS NOT NULL
@@ -83,7 +64,7 @@ class EmailService {
   }
 
   /**
-   * Get account by ID
+   * Get account(s) by ID or all accounts
    */
   async getAccounts(accountId = null) {
     try {
@@ -150,9 +131,10 @@ class EmailService {
       
       return { synced: syncResult.processed };
     } catch (error) {
-      if (error.message && error.message.includes('invalid_grant')) {
+      if (error.originalError?.response?.data?.error === 'invalid_grant') {
         logger.warn(`Account ${account.id} has an invalid grant. Marking as expired.`);
         await this.updateAccountStatus(account.id, 'expired');
+        throw new Error('Account token has expired. Please reconnect the account.');
       }
       throw error;
     }
@@ -162,7 +144,6 @@ class EmailService {
    * Sync Outlook account
    */
   async syncOutlookAccount(account, maxEmails) {
-    // Implementation would go here
     logger.info('Outlook sync not implemented in this version');
     return { synced: 0 };
   }
@@ -173,10 +154,7 @@ class EmailService {
   async refreshAccountToken(accountId) {
     try {
       const account = await this.getAccountById(accountId);
-      
-      // Token refresh logic would go here
       logger.info('Token refresh not implemented in this version');
-      
       return account;
     } catch (error) {
       logger.error('Error refreshing token:', error);
@@ -238,14 +216,8 @@ class EmailService {
           ON CONFLICT (message_id) DO NOTHING
         `;
         await client.query(query, [
-          accountId,
-          email.id,
-          email.threadId,
-          email.subject,
-          email.bodyText,
-          email.from,
-          email.from, // Using 'from' for both sender_email and sender_name for simplicity
-          email.internalDate
+          accountId, email.id, email.threadId, email.subject,
+          email.bodyText, email.from, email.from, email.internalDate
         ]);
       }
       
@@ -258,6 +230,7 @@ class EmailService {
       client.release();
     }
   }
+
   /**
    * Get statistics for a single account
    */
