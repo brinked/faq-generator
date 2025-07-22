@@ -140,6 +140,20 @@ router.get('/gmail/callback', async (req, res) => {
     gmailService.setCredentials(tokens);
     const profile = await gmailService.getUserProfile();
     
+    // Log the profile to debug
+    logger.info('Gmail profile received:', {
+      profile,
+      hasEmail: !!profile.email,
+      hasName: !!profile.name,
+      profileKeys: Object.keys(profile)
+    });
+    
+    // Ensure we have an email address
+    if (!profile.email) {
+      logger.error('No email address in Gmail profile:', profile);
+      return res.redirect(`${corsOrigin}/?error=no_email&details=${encodeURIComponent('Gmail profile did not include email address')}`);
+    }
+    
     // Calculate token expiry - Gmail tokens can have either expiry_date or expires_in
     let tokenExpiresAt;
     if (tokens.expiry_date) {
@@ -157,7 +171,7 @@ router.get('/gmail/callback', async (req, res) => {
     const accountData = {
       email_address: profile.email,
       provider: 'gmail',
-      display_name: profile.name,
+      display_name: profile.name || profile.email, // Fallback to email if no name
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       token_expires_at: tokenExpiresAt

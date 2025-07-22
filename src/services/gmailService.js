@@ -137,9 +137,31 @@ class GmailService {
     try {
       const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
       const response = await oauth2.userinfo.get();
+      
+      logger.info('Gmail userinfo response:', {
+        data: response.data,
+        status: response.status,
+        headers: response.headers
+      });
+      
+      // Ensure we have the email field
+      if (!response.data.email) {
+        logger.error('Gmail userinfo missing email:', response.data);
+        // Try to get email from 'verified_email' field or other possible fields
+        if (response.data.verified_email) {
+          response.data.email = response.data.verified_email;
+        } else if (response.data.emailAddress) {
+          response.data.email = response.data.emailAddress;
+        }
+      }
+      
       return response.data;
     } catch (error) {
-      logger.error('Error getting Gmail user profile:', error);
+      logger.error('Error getting Gmail user profile:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       throw new Error('Failed to get user profile');
     }
   }
