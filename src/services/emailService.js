@@ -258,7 +258,7 @@ class EmailService {
         const query = `
           INSERT INTO emails (account_id, message_id, thread_id, subject, body_text, sender_email, sender_name, received_at)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (message_id) DO NOTHING
+          ON CONFLICT (account_id, message_id) DO NOTHING
         `;
         await client.query(query, [
           accountId, email.id, email.threadId, email.subject,
