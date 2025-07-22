@@ -211,14 +211,25 @@ class MemoryOptimizedProcessor {
       
       for (const q of questions) {
         // Store with minimal data
+        // Generate embedding for the question
+        let embedding = null;
+        try {
+          const AIService = require('./aiService');
+          const aiService = new AIService();
+          embedding = await aiService.generateEmbedding(q.question);
+        } catch (embeddingError) {
+          logger.warn(`Failed to generate embedding for question: ${embeddingError.message}`);
+        }
+
         await client.query(
-          `INSERT INTO questions 
-           (email_id, question_text, answer_text, confidence, category, 
-            sender_email, sender_name, detected_at, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
+          `INSERT INTO questions
+           (email_id, question_text, answer_text, confidence_score, category,
+            sender_email, sender_name, detected_at, metadata, embedding, is_customer_question)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, $10)
            ON CONFLICT (email_id, question_text) DO UPDATE
            SET answer_text = EXCLUDED.answer_text,
-               confidence = EXCLUDED.confidence,
+               confidence_score = EXCLUDED.confidence_score,
+               embedding = EXCLUDED.embedding,
                updated_at = NOW()`,
           [
             emailId,
@@ -231,7 +242,9 @@ class MemoryOptimizedProcessor {
             JSON.stringify({
               context: q.context ? q.context.substring(0, 500) : null,
               isFromCustomer: q.isFromCustomer !== false
-            })
+            }),
+            embedding ? JSON.stringify(embedding) : null,
+            q.isFromCustomer !== false
           ]
         );
       }
