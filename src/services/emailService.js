@@ -159,6 +159,38 @@ class EmailService {
       throw error;
     }
   }
+
+  /**
+   * Create or update email account
+   */
+  async createOrUpdateAccount(accountData) {
+    try {
+      const { email, provider, accessToken, refreshToken, expiresAt, displayName } = accountData;
+      
+      const result = await db.query(
+        `INSERT INTO email_accounts
+         (email_address, provider, access_token, refresh_token, token_expires_at, display_name, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active')
+         ON CONFLICT (email_address)
+         DO UPDATE SET
+           access_token = EXCLUDED.access_token,
+           refresh_token = EXCLUDED.refresh_token,
+           token_expires_at = EXCLUDED.token_expires_at,
+           display_name = EXCLUDED.display_name,
+           status = 'active',
+           updated_at = NOW()
+         RETURNING *`,
+        [email, provider, accessToken, refreshToken, expiresAt, displayName]
+      );
+      
+      logger.info('Account created/updated successfully:', { email, provider });
+      return result.rows[0];
+      
+    } catch (error) {
+      logger.error('Error creating/updating account:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = EmailService;
