@@ -11,7 +11,7 @@ const emailService = new EmailService();
  */
 router.get('/', async (req, res) => {
   try {
-    const accounts = await emailService.getAllAccounts();
+    const accounts = await emailService.getAccounts();
     
     // Get statistics for each account
     const accountsWithStats = await Promise.all(
@@ -60,7 +60,7 @@ router.get('/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
     
-    const account = await emailService.getAccount(accountId);
+    const account = await emailService.getAccounts(accountId);
     const stats = await emailService.getAccountStats(accountId);
     
     // Remove sensitive data

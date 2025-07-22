@@ -85,20 +85,25 @@ class EmailService {
   /**
    * Get account by ID
    */
-  async getAccount(accountId) {
+  async getAccounts(accountId = null) {
     try {
-      const result = await db.query(
-        'SELECT * FROM email_accounts WHERE id = $1',
-        [accountId]
-      );
+      let query = 'SELECT * FROM email_accounts';
+      const params = [];
       
-      if (result.rows.length === 0) {
+      if (accountId) {
+        query += ' WHERE id = $1';
+        params.push(accountId);
+      }
+      
+      const result = await db.query(query, params);
+      
+      if (accountId && result.rows.length === 0) {
         throw new Error('Account not found');
       }
       
-      return result.rows[0];
+      return accountId ? result.rows[0] : result.rows;
     } catch (error) {
-      logger.error('Error getting account:', error);
+      logger.error('Error getting account(s):', error);
       throw error;
     }
   }

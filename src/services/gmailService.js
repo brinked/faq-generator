@@ -138,33 +138,36 @@ class GmailService {
       const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
       const response = await oauth2.userinfo.get();
       
-      logger.info('Gmail userinfo response:', {
-        data: response.data,
+      // Enhanced logging to capture the full response
+      logger.info('Full Gmail userinfo response:', {
+        data: JSON.stringify(response.data, null, 2),
         status: response.status,
         headers: response.headers
       });
       
-      // Ensure we have the email field, with robust fallbacks
-      let email = response.data.email;
+      let email = response.data.email || response.data.emailAddress;
+      
       if (!email && Array.isArray(response.data.emails) && response.data.emails.length > 0) {
-        const primaryEmail = response.data.emails.find(e => e.type === 'account');
+        const primaryEmail = response.data.emails.find(e => e.type === 'account' && e.value);
         email = primaryEmail ? primaryEmail.value : response.data.emails[0].value;
         logger.warn('Primary email field missing, using fallback from emails array:', { email });
-      } else if (!email) {
-        logger.error('Could not determine email from userinfo response:', response.data);
       }
       
-      // Return a structured object, ensuring email is explicitly set
+      if (!email) {
+        logger.error('Could not determine email from userinfo response after all fallbacks:', response.data);
+      }
+      
       return {
         ...response.data,
-        email: email || null // Ensure email is null if not found
+        email: email || null
       };
       
     } catch (error) {
       logger.error('Error getting Gmail user profile:', {
         message: error.message,
         response: error.response?.data,
-        status: error.response?.status
+        status: error.response?.status,
+        stack: error.stack
       });
       throw new Error('Failed to get user profile');
     }
