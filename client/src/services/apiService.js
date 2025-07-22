@@ -177,7 +177,7 @@ class ApiService {
   }
 
   async getFAQSources(faqId) {
-    return this.request(`/api/faq-sources/${faqId}`);
+    return this.request(`/api/faq-sources/${faqId}/sources`);
   }
 
   // Dashboard and analytics

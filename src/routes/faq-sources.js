@@ -58,7 +58,8 @@ router.get('/:faqId/sources', async (req, res) => {
       receivedAt: row.received_at,
       sentAt: row.sent_at,
       questionCreatedAt: row.question_created_at,
-      emailPreview: row.body_text ? row.body_text.substring(0, 200) + '...' : 'No content'
+      emailPreview: row.body_text ? row.body_text.substring(0, 200) + '...' : 'No content',
+      emailBodyText: row.body_text || 'No content available'
     }));
     
     // Get FAQ group info

@@ -4,6 +4,35 @@ import { toast } from 'react-toastify';
 import { apiService } from '../services/apiService';
 import LoadingSpinner, { ButtonSpinner } from './LoadingSpinner';
 
+// Helper function to highlight question text within email content
+const highlightQuestionInText = (emailText, questionText) => {
+  if (!emailText || !questionText) return emailText || '';
+  
+  // Escape HTML in the original text
+  const escapeHtml = (text) => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+  
+  const escapedEmailText = escapeHtml(emailText);
+  
+  // Create a case-insensitive regex to find the question text
+  // Split question into words and create a flexible pattern
+  const questionWords = questionText.trim().split(/\s+/).filter(word => word.length > 2);
+  
+  if (questionWords.length === 0) return escapedEmailText;
+  
+  // Create pattern that matches the question words with some flexibility
+  const pattern = questionWords.map(word =>
+    word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
+  ).join('\\s+\\w*\\s*'); // Allow words between question words
+  
+  const regex = new RegExp(`(${pattern})`, 'gi');
+  
+  return escapedEmailText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+};
+
 const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -793,6 +822,21 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                             <p className="text-sm text-gray-800 leading-relaxed">
                               {source.question_text}
                             </p>
+                          </div>
+                        )}
+                        
+                        {source.emailBodyText && (
+                          <div className="mt-3 p-3 bg-white rounded border border-gray-200">
+                            <h6 className="text-xs font-medium text-gray-700 mb-2 uppercase tracking-wide">
+                              Email Content:
+                            </h6>
+                            <div className="text-sm text-gray-800 leading-relaxed max-h-48 overflow-y-auto">
+                              <div
+                                dangerouslySetInnerHTML={{
+                                  __html: highlightQuestionInText(source.emailBodyText, source.question_text)
+                                }}
+                              />
+                            </div>
                           </div>
                         )}
                       </motion.div>
