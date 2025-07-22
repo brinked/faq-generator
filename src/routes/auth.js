@@ -150,8 +150,8 @@ router.get('/gmail/callback', async (req, res) => {
     
     // Ensure we have an email address
     if (!profile.email) {
-      logger.error('No email address in Gmail profile:', profile);
-      return res.redirect(`${corsOrigin}/?error=no_email&details=${encodeURIComponent('Gmail profile did not include email address')}`);
+      logger.error('No email address in Gmail profile after robust check:', profile);
+      return res.redirect(`${corsOrigin}/?error=no_email&details=${encodeURIComponent('Could not retrieve a valid email address from Gmail profile')}`);
     }
     
     // Calculate token expiry - Gmail tokens can have either expiry_date or expires_in

@@ -144,18 +144,22 @@ class GmailService {
         headers: response.headers
       });
       
-      // Ensure we have the email field
-      if (!response.data.email) {
-        logger.error('Gmail userinfo missing email:', response.data);
-        // Try to get email from 'verified_email' field or other possible fields
-        if (response.data.verified_email) {
-          response.data.email = response.data.verified_email;
-        } else if (response.data.emailAddress) {
-          response.data.email = response.data.emailAddress;
-        }
+      // Ensure we have the email field, with robust fallbacks
+      let email = response.data.email;
+      if (!email && Array.isArray(response.data.emails) && response.data.emails.length > 0) {
+        const primaryEmail = response.data.emails.find(e => e.type === 'account');
+        email = primaryEmail ? primaryEmail.value : response.data.emails[0].value;
+        logger.warn('Primary email field missing, using fallback from emails array:', { email });
+      } else if (!email) {
+        logger.error('Could not determine email from userinfo response:', response.data);
       }
       
-      return response.data;
+      // Return a structured object, ensuring email is explicitly set
+      return {
+        ...response.data,
+        email: email || null // Ensure email is null if not found
+      };
+      
     } catch (error) {
       logger.error('Error getting Gmail user profile:', {
         message: error.message,
