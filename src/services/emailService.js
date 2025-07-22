@@ -1,5 +1,4 @@
 const { google } = require('googleapis');
-const { authenticate } = require('@google-cloud/local-auth');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const { encrypt, decrypt } = require('../utils/encryption');
