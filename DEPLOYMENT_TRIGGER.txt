@@ -1,6 +1,6 @@
 DEPLOYMENT TRIGGER - Force Render Service Restart
-Timestamp: 2025-07-21 22:43:00 UTC
-Commit: e984d96 - Fix const assignment error in aiService
+Timestamp: 2025-07-22 22:49:00 UTC
+Commit: af538cb - Fix FAQ sources API to handle NULL email_subject gracefully
 
 CRITICAL FIXES APPLIED:
 ✅ OpenAI v3 compatibility (fixed constructor error)
@@ -9,6 +9,9 @@ CRITICAL FIXES APPLIED:
 ✅ Memory optimization for Render 2GB limit
 ✅ Health monitoring system
 ✅ Enhanced error handling
+✅ FAQ sources API route fix (/api/faq-sources/{id}/sources)
+✅ NULL email_subject graceful handling
+✅ Email content body display with question highlighting
 
-TRIGGER REASON: Services need restart to apply all fixes
-EXPECTED RESULT: FAQ generator processes beyond 60 emails successfully
+TRIGGER REASON: FAQ sources modal fix needs deployment
+EXPECTED RESULT: "asked x times" modal displays email sources correctly
