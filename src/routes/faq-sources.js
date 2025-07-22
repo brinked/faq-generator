@@ -49,7 +49,7 @@ router.get('/:faqId/sources', async (req, res) => {
     const emailSources = result.rows.map(row => ({
       questionId: row.question_id,
       questionText: row.question_text,
-      senderEmail: row.sender_email,
+      senderEmail: row.sender_email || 'Unknown sender',
       senderName: row.sender_name || 'Unknown',
       emailSubject: row.email_subject || row.full_subject || 'No Subject',
       confidenceScore: parseFloat(row.confidence_score || 0),
@@ -61,6 +61,17 @@ router.get('/:faqId/sources', async (req, res) => {
       emailPreview: row.body_text ? row.body_text.substring(0, 200) + '...' : 'No content',
       emailBodyText: row.body_text || 'No content available'
     }));
+    
+    // Log for debugging
+    logger.info(`FAQ sources query returned ${emailSources.length} sources for FAQ ${faqId}`, {
+      sampleSource: emailSources[0] ? {
+        questionId: emailSources[0].questionId,
+        senderEmail: emailSources[0].senderEmail,
+        senderName: emailSources[0].senderName,
+        emailSubject: emailSources[0].emailSubject,
+        hasBodyText: !!emailSources[0].emailBodyText
+      } : null
+    });
     
     // Get FAQ group info
     const faqQuery = `

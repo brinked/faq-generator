@@ -1,0 +1,23 @@
+# Database Debug Commands for Render Shell
+# Copy and paste these commands one by one
+
+# 1. Check question_groups relationships
+psql $DATABASE_URL -c "SELECT COUNT(*) as question_group_relationships FROM question_groups;"
+
+# 2. Check specific FAQ ID relationships (using the ID from your error)
+psql $DATABASE_URL -c "SELECT * FROM question_groups WHERE group_id = 'bd8751b6-c8de-4886-abd4-25652e0113e3' LIMIT 3;"
+
+# 3. Check if any FAQ groups have relationships
+psql $DATABASE_URL -c "SELECT group_id, COUNT(*) as question_count FROM question_groups GROUP BY group_id LIMIT 5;"
+
+# 4. Check a sample of questions to see if they have the required fields
+psql $DATABASE_URL -c "SELECT id, sender_email, sender_name, email_subject FROM questions WHERE sender_email IS NOT NULL LIMIT 3;"
+
+# 5. Check ALL questions to see if email fields are populated
+psql $DATABASE_URL -c "SELECT id, sender_email, sender_name, email_subject FROM questions LIMIT 5;"
+
+# 6. Check if the specific FAQ exists
+psql $DATABASE_URL -c "SELECT id, title, question_count FROM faq_groups WHERE id = 'bd8751b6-c8de-4886-abd4-25652e0113e3';"
+
+# 7. Check the specific questions linked to that FAQ
+psql $DATABASE_URL -c "SELECT q.id, q.sender_email, q.sender_name, q.email_subject FROM questions q JOIN question_groups qg ON q.id = qg.question_id WHERE qg.group_id = 'bd8751b6-c8de-4886-abd4-25652e0113e3';"
