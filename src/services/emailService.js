@@ -115,7 +115,7 @@ class EmailService {
     const { maxEmails = 100 } = options;
     
     try {
-      const account = await this.getAccount(accountId);
+      const account = await this.getAccountById(accountId);
       
       if (account.provider === 'gmail') {
         return await this.syncGmailAccount(account, maxEmails);
@@ -153,7 +153,7 @@ class EmailService {
    */
   async refreshAccountToken(accountId) {
     try {
-      const account = await this.getAccount(accountId);
+      const account = await this.getAccountById(accountId);
       
       // Token refresh logic would go here
       logger.info('Token refresh not implemented in this version');
@@ -195,6 +195,13 @@ class EmailService {
       logger.error('Error creating/updating account:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get a single account by its ID
+   */
+  async getAccountById(accountId) {
+    return this.getAccounts(accountId);
   }
 }
 

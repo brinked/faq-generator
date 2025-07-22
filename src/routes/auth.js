@@ -185,6 +185,10 @@ router.get('/gmail/callback', async (req, res) => {
       logger.error('CRITICAL: Attempted to create account with null email address. Aborting.', { accountData });
       return res.redirect(`${corsOrigin}/?error=critical_no_email`);
     }
+    if (!accountData.email_address) {
+      logger.error('CRITICAL: Attempted to create account with null email address. Aborting.', { accountData });
+      return res.redirect(`${corsOrigin}/?error=critical_no_email`);
+    }
     const account = await emailService.createOrUpdateAccount(accountData);
     
     logger.info(`Gmail account connected: ${profile.email}`);
