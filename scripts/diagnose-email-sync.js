@@ -1,252 +1,180 @@
 #!/usr/bin/env node
 
 /**
- * Email Sync Diagnostic Script
- * 
- * This script helps diagnose why email synchronization isn't working
- * by checking all the components involved in the sync process.
- * 
- * Usage: node scripts/diagnose-email-sync.js
+ * Diagnose Email Sync Issues
+ * This script helps identify why no customer emails are being synced
  */
 
+const { Pool } = require('pg');
 require('dotenv').config();
-const logger = require('../src/utils/logger');
-const EmailService = require('../src/services/emailService');
-const GmailService = require('../src/services/gmailService');
-const db = require('../src/config/database');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 async function diagnoseEmailSync() {
+  console.log('🔍 Diagnosing Email Sync Issues...\n');
+  
   try {
-    console.log('\n🔍 FAQ Generator Email Sync Diagnostic\n');
+    // Connect to database
+    await pool.query('SELECT NOW()');
+    console.log('✅ Database connected\n');
     
-    const emailService = new EmailService();
-    const gmailService = new GmailService();
-    
-    // 1. Check database connection
-    console.log('1. 📊 Checking database connection...');
-    try {
-      const dbResult = await db.query('SELECT NOW() as current_time');
-      console.log(`   ✅ Database connected: ${dbResult.rows[0].current_time}`);
-    } catch (dbError) {
-      console.log(`   ❌ Database connection failed: ${dbError.message}`);
-      return;
-    }
-    
-    // 2. Check environment variables
-    console.log('\n2. 🔧 Checking environment variables...');
-    const requiredEnvVars = [
-      'BASE_URL',
-      'GMAIL_CLIENT_ID',
-      'GMAIL_CLIENT_SECRET',
-      'DATABASE_URL'
-    ];
-    
-    let envIssues = 0;
-    requiredEnvVars.forEach(envVar => {
-      if (process.env[envVar]) {
-        console.log(`   ✅ ${envVar}: Set`);
-      } else {
-        console.log(`   ❌ ${envVar}: Missing`);
-        envIssues++;
-      }
-    });
-    
-    if (envIssues > 0) {
-      console.log(`   ⚠️  ${envIssues} environment variables are missing`);
-    }
-    
-    // 3. Check email accounts
-    console.log('\n3. 📧 Checking email accounts...');
-    const accounts = await emailService.getAllAccounts();
-    
-    if (accounts.length === 0) {
-      console.log('   ❌ No email accounts found in database');
-      console.log('   💡 Try connecting a Gmail account first');
-      return;
-    }
-    
-    console.log(`   ✅ Found ${accounts.length} email account(s):`);
-    accounts.forEach(account => {
-      console.log(`      • ${account.email_address} (${account.provider}) - Status: ${account.status}`);
-      console.log(`        Last sync: ${account.last_sync_at || 'Never'}`);
-      console.log(`        Created: ${account.created_at}`);
-    });
-    
-    // 4. Test each account connection
-    console.log('\n4. 🔗 Testing account connections...');
-    for (const account of accounts) {
-      console.log(`\n   Testing ${account.email_address}...`);
-      
-      try {
-        // Get full account details with decrypted tokens
-        const fullAccount = await emailService.getAccount(account.id);
-        
-        if (!fullAccount.access_token) {
-          console.log(`   ❌ No access token found for ${account.email_address}`);
-          continue;
-        }
-        
-        // Test connection
-        if (account.provider === 'gmail') {
-          gmailService.setCredentials({
-            access_token: fullAccount.access_token,
-            refresh_token: fullAccount.refresh_token
-          });
-          
-          const testResult = await gmailService.testConnection();
-          
-          if (testResult.success) {
-            console.log(`   ✅ Gmail connection successful`);
-            console.log(`      Email: ${testResult.email}`);
-            console.log(`      Name: ${testResult.name}`);
-            console.log(`      Estimated messages: ${testResult.messageCount}`);
-          } else {
-            console.log(`   ❌ Gmail connection failed: ${testResult.error}`);
-          }
-        }
-        
-      } catch (testError) {
-        console.log(`   ❌ Connection test failed: ${testError.message}`);
-      }
-    }
-    
-    // 5. Check existing emails
-    console.log('\n5. 📬 Checking existing emails in database...');
-    const emailCountResult = await db.query(`
+    // 1. Check email distribution by sender
+    console.log('📊 Email Distribution by Sender:');
+    const senderStats = await pool.query(`
       SELECT 
-        ea.email_address,
-        ea.provider,
-        COUNT(e.id) as email_count,
-        COUNT(e.id) FILTER (WHERE e.is_processed = true) as processed_count,
-        MAX(e.received_at) as latest_email
-      FROM email_accounts ea
-      LEFT JOIN emails e ON ea.id = e.account_id
-      GROUP BY ea.id, ea.email_address, ea.provider
-      ORDER BY ea.created_at DESC
+        sender_email,
+        COUNT(*) as email_count,
+        MIN(received_at) as earliest_email,
+        MAX(received_at) as latest_email
+      FROM emails
+      GROUP BY sender_email
+      ORDER BY email_count DESC
+      LIMIT 20
     `);
     
-    if (emailCountResult.rows.length === 0) {
-      console.log('   ❌ No email data found');
-    } else {
-      emailCountResult.rows.forEach(row => {
-        console.log(`   📧 ${row.email_address} (${row.provider}):`);
-        console.log(`      Total emails: ${row.email_count}`);
-        console.log(`      Processed: ${row.processed_count}`);
-        console.log(`      Latest email: ${row.latest_email || 'None'}`);
-      });
-    }
+    console.log('Top 20 Senders:');
+    senderStats.rows.forEach(row => {
+      console.log(`  ${row.sender_email}: ${row.email_count} emails`);
+    });
     
-    // 6. Test manual sync for first account
-    if (accounts.length > 0) {
-      console.log('\n6. 🔄 Testing manual email sync...');
-      const testAccount = accounts[0];
-      console.log(`   Testing sync for ${testAccount.email_address}...`);
-      
-      try {
-        const syncResult = await emailService.syncAccount(testAccount.id, { maxEmails: 10 });
-        
-        console.log(`   ✅ Sync completed successfully:`);
-        console.log(`      Processed: ${syncResult.processed || 0} emails`);
-        console.log(`      Total available: ${syncResult.total || 0} emails`);
-        console.log(`      Stored: ${syncResult.stored || 0} new emails`);
-        console.log(`      Skipped: ${syncResult.skipped || 0} duplicates`);
-        
-      } catch (syncError) {
-        console.log(`   ❌ Manual sync failed: ${syncError.message}`);
-        console.log(`      Stack: ${syncError.stack}`);
-      }
-    }
-    
-    // 7. Check cron job configuration
-    console.log('\n7. ⏰ Checking cron job configuration...');
-    console.log('   Environment variables for cron jobs:');
-    console.log(`   • CRON_SYNC_MAX_EMAILS: ${process.env.CRON_SYNC_MAX_EMAILS || 'Not set (default: 500)'}`);
-    console.log(`   • CRON_TIMEOUT_MS: ${process.env.CRON_TIMEOUT_MS || 'Not set (default: 600000)'}`);
-    console.log(`   • MAX_EMAILS_PER_SYNC: ${process.env.MAX_EMAILS_PER_SYNC || 'Not set (default: 1000)'}`);
-    
-    // 8. Check system metrics
-    console.log('\n8. 📊 Checking recent system metrics...');
-    const metricsResult = await db.query(`
-      SELECT metric_name, metric_value, metadata, created_at
-      FROM system_metrics 
-      WHERE metric_name LIKE '%email%' OR metric_name LIKE '%sync%'
-      ORDER BY created_at DESC 
+    // 2. Check unique sender domains
+    console.log('\n📧 Unique Sender Domains:');
+    const domainStats = await pool.query(`
+      SELECT 
+        SUBSTRING(sender_email FROM '@(.*)$') as domain,
+        COUNT(DISTINCT sender_email) as unique_senders,
+        COUNT(*) as total_emails
+      FROM emails
+      WHERE sender_email LIKE '%@%'
+      GROUP BY domain
+      ORDER BY total_emails DESC
       LIMIT 10
     `);
     
-    if (metricsResult.rows.length === 0) {
-      console.log('   ❌ No email sync metrics found');
-      console.log('   💡 This suggests cron jobs may not be running');
-    } else {
-      console.log('   📈 Recent email sync metrics:');
-      metricsResult.rows.forEach(metric => {
-        console.log(`      • ${metric.metric_name}: ${metric.metric_value} (${metric.created_at})`);
-        if (metric.metadata) {
-          try {
-            const metadata = typeof metric.metadata === 'string' ? JSON.parse(metric.metadata) : metric.metadata;
-            console.log(`        Duration: ${metadata.duration}ms, Accounts: ${metadata.accounts || 0}`);
-          } catch (parseError) {
-            console.log(`        Metadata: ${metric.metadata}`);
-          }
-        }
+    domainStats.rows.forEach(row => {
+      console.log(`  @${row.domain}: ${row.unique_senders} senders, ${row.total_emails} emails`);
+    });
+    
+    // 3. Check email metadata
+    console.log('\n📋 Email Metadata Analysis:');
+    const metadataStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_emails,
+        COUNT(DISTINCT message_id) as unique_messages,
+        COUNT(DISTINCT thread_id) as unique_threads,
+        COUNT(*) FILTER (WHERE thread_id IS NULL) as emails_without_thread,
+        COUNT(*) FILTER (WHERE gmail_labels IS NOT NULL) as emails_with_labels
+      FROM emails
+    `);
+    
+    const stats = metadataStats.rows[0];
+    console.log(`  Total Emails: ${stats.total_emails}`);
+    console.log(`  Unique Messages: ${stats.unique_messages}`);
+    console.log(`  Unique Threads: ${stats.unique_threads}`);
+    console.log(`  Emails without Thread ID: ${stats.emails_without_thread}`);
+    console.log(`  Emails with Gmail Labels: ${stats.emails_with_labels}`);
+    
+    // 4. Check Gmail labels
+    console.log('\n🏷️  Gmail Label Analysis:');
+    const labelQuery = await pool.query(`
+      SELECT 
+        gmail_labels,
+        COUNT(*) as count
+      FROM emails
+      WHERE gmail_labels IS NOT NULL
+      GROUP BY gmail_labels
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+    
+    if (labelQuery.rows.length > 0) {
+      labelQuery.rows.forEach(row => {
+        console.log(`  ${row.gmail_labels}: ${row.count} emails`);
       });
+    } else {
+      console.log('  No Gmail labels found');
     }
     
-    // 9. Recommendations
-    console.log('\n9. 💡 Recommendations:');
+    // 5. Sample email subjects
+    console.log('\n📝 Sample Email Subjects:');
+    const subjectSample = await pool.query(`
+      SELECT 
+        subject,
+        sender_email,
+        received_at
+      FROM emails
+      ORDER BY received_at DESC
+      LIMIT 10
+    `);
     
-    if (accounts.length === 0) {
-      console.log('   • Connect a Gmail account through the web interface');
+    subjectSample.rows.forEach(row => {
+      const date = new Date(row.received_at).toLocaleDateString();
+      console.log(`  [${date}] ${row.sender_email}: "${row.subject}"`);
+    });
+    
+    // 6. Check for any recipient information
+    console.log('\n👥 Recipient Analysis:');
+    const recipientCheck = await pool.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE recipient_emails IS NOT NULL) as has_recipients,
+        COUNT(*) FILTER (WHERE recipient_emails IS NULL) as no_recipients
+      FROM emails
+    `);
+    
+    const recStats = recipientCheck.rows[0];
+    console.log(`  Emails with recipients: ${recStats.has_recipients}`);
+    console.log(`  Emails without recipients: ${recStats.no_recipients}`);
+    
+    // 7. Check sync configuration
+    console.log('\n⚙️  Email Account Configuration:');
+    const accountConfig = await pool.query(`
+      SELECT 
+        id,
+        email_address,
+        provider,
+        status,
+        last_sync_at,
+        sync_enabled
+      FROM email_accounts
+    `);
+    
+    accountConfig.rows.forEach(acc => {
+      console.log(`\n  Account: ${acc.email_address}`);
+      console.log(`    Provider: ${acc.provider}`);
+      console.log(`    Status: ${acc.status}`);
+      console.log(`    Sync Enabled: ${acc.sync_enabled}`);
+      console.log(`    Last Sync: ${acc.last_sync_at || 'Never'}`);
+    });
+    
+    // Diagnosis
+    console.log('\n\n🔍 DIAGNOSIS:');
+    console.log('=====================================');
+    
+    if (senderStats.rows.length === 1 && senderStats.rows[0].sender_email.includes('extcabinets.com')) {
+      console.log('❌ ISSUE: Only emails FROM your business account are being synced');
+      console.log('\nPOSSIBLE CAUSES:');
+      console.log('1. Gmail API might be configured to only sync SENT folder');
+      console.log('2. Email sync query might be filtering by sender');
+      console.log('3. OAuth scope might be limited to sent emails only');
+      console.log('\nRECOMMENDED ACTIONS:');
+      console.log('1. Check Gmail sync settings to include INBOX');
+      console.log('2. Verify OAuth scopes include reading all emails');
+      console.log('3. Review emailService.js sync logic');
+    } else if (domainStats.rows.length === 1) {
+      console.log('⚠️  WARNING: All emails are from a single domain');
+    } else {
+      console.log('✅ Email diversity looks normal');
     }
-    
-    if (envIssues > 0) {
-      console.log('   • Fix missing environment variables');
-    }
-    
-    const hasRecentMetrics = metricsResult.rows.some(m => 
-      new Date(m.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
-    );
-    
-    if (!hasRecentMetrics) {
-      console.log('   • Check if cron jobs are configured and running on Render.com');
-      console.log('   • Manually trigger email sync using: node scripts/manual-email-sync.js');
-    }
-    
-    const unprocessedEmails = emailCountResult.rows.reduce((sum, row) => 
-      sum + (parseInt(row.email_count) - parseInt(row.processed_count)), 0
-    );
-    
-    if (unprocessedEmails > 0) {
-      console.log(`   • Process ${unprocessedEmails} unprocessed emails using FAQ generation`);
-    }
-    
-    console.log('\n✅ Diagnostic complete!');
     
   } catch (error) {
-    console.error('\n❌ Diagnostic failed:', error);
-    logger.error('Email sync diagnostic failed:', error);
+    console.error('\n❌ Diagnosis failed:', error.message);
   } finally {
-    await db.end();
+    await pool.end();
   }
 }
 
-// Handle process signals
-process.on('SIGTERM', () => {
-  console.log('\nReceived SIGTERM, shutting down diagnostic');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('\nReceived SIGINT, shutting down diagnostic');
-  process.exit(0);
-});
-
-// Run the diagnostic
-if (require.main === module) {
-  diagnoseEmailSync().catch(error => {
-    console.error('Diagnostic script failed:', error);
-    process.exit(1);
-  });
-}
-
-module.exports = { diagnoseEmailSync };
+// Run diagnosis
+diagnoseEmailSync();
