@@ -38,6 +38,8 @@ class EmailService {
           WHERE e.processed_for_faq = false
             AND e.body_text IS NOT NULL
             AND LENGTH(e.body_text) > 50
+            AND e.direction = 'inbound'
+            AND e.filtering_status = 'qualified'
           ORDER BY e.received_at DESC
           LIMIT $1 OFFSET $2
         `;
@@ -53,6 +55,8 @@ class EmailService {
           JOIN email_accounts ea ON e.account_id = ea.id
           WHERE e.body_text IS NOT NULL
             AND LENGTH(e.body_text) > 50
+            AND e.direction = 'inbound'
+            AND e.filtering_status = 'qualified'
             AND NOT EXISTS (
               SELECT 1 FROM questions q
               WHERE q.email_id = e.id
