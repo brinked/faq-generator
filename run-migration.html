@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run Email Filtering Migration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .status-box {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: inline-block;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Email Filtering Migration Runner</h1>
+        
+        <p>This page helps you run the database migration needed for the email filtering system.</p>
+        
+        <h2>Migration Status</h2>
+        <div id="status" class="status-box">Click "Check Status" to see current migration status...</div>
+        
+        <div>
+            <button onclick="checkStatus()">Check Status</button>
+            <button onclick="runMigration()" id="runBtn" disabled>Run Migration</button>
+            <span id="loading" class="loading" style="display:none;">⏳ Processing...</span>
+        </div>
+        
+        <h2>Migration Details</h2>
+        <p>The migration will add these columns to the emails table:</p>
+        <ul>
+            <li><strong>direction</strong> - Tracks if email is 'inbound' or 'outbound'</li>
+            <li><strong>has_response</strong> - Boolean indicating if email has been responded to</li>
+            <li><strong>filtering_status</strong> - Current filtering decision</li>
+            <li><strong>filtering_reason</strong> - Why email was filtered</li>
+            <li><strong>filtering_metadata</strong> - Additional filtering data</li>
+            <li><strong>is_automated</strong> - If email is automated/auto-reply</li>
+            <li><strong>is_spam</strong> - If email is spam/promotional</li>
+            <li><strong>quality_score</strong> - Email quality rating</li>
+        </ul>
+    </div>
+
+    <script>
+        // Update this to your production URL
+        const API_BASE = 'https://faq-generator-web.onrender.com';
+        
+        async function checkStatus() {
+            const statusDiv = document.getElementById('status');
+            const runBtn = document.getElementById('runBtn');
+            const loading = document.getElementById('loading');
+            
+            loading.style.display = 'inline';
+            statusDiv.className = 'status-box';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/run-migration/status`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const migration = data.emailFilteringMigration;
+                    
+                    if (migration.status === 'completed') {
+                        statusDiv.className = 'status-box success';
+                        statusDiv.textContent = `✅ Migration Status: COMPLETED\n\nAll columns exist:\n${migration.existingColumns.join('\n')}`;
+                        runBtn.disabled = true;
+                        runBtn.textContent = 'Migration Already Applied';
+                    } else {
+                        statusDiv.className = 'status-box pending';
+                        statusDiv.textContent = `⚠️ Migration Status: PENDING\n\nMissing columns:\n${migration.missingColumns.join('\n')}\n\nProgress: ${migration.progress}`;
+                        runBtn.disabled = false;
+                        runBtn.textContent = 'Run Migration';
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to check status');
+                }
+            } catch (error) {
+                statusDiv.className = 'status-box error';
+                statusDiv.textContent = `❌ Error checking status:\n${error.message}`;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        async function runMigration() {
+            const statusDiv = document.getElementById('status');
+            const runBtn = document.getElementById('runBtn');
+            const loading = document.getElementById('loading');
+            
+            if (!confirm('Are you sure you want to run the email filtering migration?')) {
+                return;
+            }
+            
+            loading.style.display = 'inline';
+            runBtn.disabled = true;
+            statusDiv.className = 'status-box';
+            statusDiv.textContent = 'Running migration...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/run-migration/email-filtering`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'status-box success';
+                    statusDiv.textContent = `✅ ${data.message}\n\nFields added:\n${data.fieldsAdded.join('\n')}`;
+                    runBtn.textContent = 'Migration Completed';
+                    
+                    // Check filtering stats after migration
+                    setTimeout(() => {
+                        statusDiv.textContent += '\n\nChecking filtering stats...';
+                        checkFilteringStats();
+                    }, 2000);
+                } else {
+                    throw new Error(data.error || 'Failed to run migration');
+                }
+            } catch (error) {
+                statusDiv.className = 'status-box error';
+                statusDiv.textContent = `❌ Error running migration:\n${error.message}`;
+                runBtn.disabled = false;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        async function checkFilteringStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/filtering-stats`);
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('status');
+                if (data.success) {
+                    statusDiv.textContent += '\n\n✅ Filtering stats endpoint is now working!';
+                } else {
+                    statusDiv.textContent += '\n\n⚠️ Filtering stats: ' + (data.error || 'Unknown error');
+                }
+            } catch (error) {
+                console.error('Error checking filtering stats:', error);
+            }
+        }
+        
+        // Check status on page load
+        window.onload = () => {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>
