@@ -9,7 +9,7 @@ const filteringService = new EmailFilteringService();
 /**
  * Get email filtering statistics
  */
-router.get('/stats', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     // Get date range from query params
     const { startDate, endDate } = req.query;
