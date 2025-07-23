@@ -11,6 +11,35 @@ const filteringService = new EmailFilteringService();
  */
 router.get('/', async (req, res) => {
   try {
+    // First check if the new columns exist
+    const columnCheckQuery = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'emails'
+      AND column_name IN ('direction', 'has_response', 'filtering_status', 'filtering_reason', 'is_automated', 'is_spam', 'quality_score')
+    `;
+    
+    const columnCheckResult = await db.query(columnCheckQuery);
+    const existingColumns = columnCheckResult.rows.map(row => row.column_name);
+    
+    // Check if all required columns exist
+    const requiredColumns = ['direction', 'has_response', 'filtering_status', 'filtering_reason', 'is_automated', 'is_spam'];
+    const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
+    
+    if (missingColumns.length > 0) {
+      logger.warn('Missing email filtering columns:', missingColumns);
+      return res.json({
+        success: false,
+        error: 'Email filtering columns not yet available',
+        message: 'The database migration for email filtering has not been run yet. Please run the migration: add_email_filtering_fields.sql',
+        missingColumns,
+        migration: {
+          file: 'database/migrations/add_email_filtering_fields.sql',
+          status: 'pending'
+        }
+      });
+    }
+    
     // Get date range from query params
     const { startDate, endDate } = req.query;
     
@@ -19,7 +48,7 @@ router.get('/', async (req, res) => {
     
     // Get detailed breakdown of filtering reasons
     const reasonsQuery = `
-      SELECT 
+      SELECT
         filtering_reason,
         COUNT(*) as count,
         ROUND(COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER(), 0), 2) as percentage

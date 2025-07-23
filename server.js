@@ -27,6 +27,7 @@ const migrateRoutes = require('./src/routes/migrate');
 const debugDeploymentRoutes = require('./src/routes/debug-deployment');
 const migrationRoutes = require('./src/routes/migration');
 const filteringStatsRoutes = require('./src/routes/filtering-stats');
+const runMigrationRoutes = require('./src/routes/run-migration');
 const { initializeQueues } = require('./src/services/queueService');
 const { startScheduledJobs } = require('./src/services/schedulerService');
 const healthMonitor = require('./src/services/healthMonitor');
@@ -126,6 +127,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/migrate', migrateRoutes);
 app.use('/api/filtering-stats', filteringStatsRoutes);
+app.use('/api/run-migration', runMigrationRoutes);
 
 // Test OAuth callback route (temporary for debugging)
 app.use('/api/test/oauth', testOAuthCallbackRoutes);
