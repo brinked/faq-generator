@@ -18,15 +18,38 @@ class EmailService {
       // Get all connected accounts for filtering
       const connectedAccounts = await this.getAccounts();
       
+      // Check which columns exist
       const columnCheck = await db.query(`
         SELECT column_name
         FROM information_schema.columns
         WHERE table_name = 'emails'
-        AND column_name = 'processed_for_faq'
+        AND column_name IN ('processed_for_faq', 'direction', 'filtering_status')
       `);
       
+      const existingColumns = columnCheck.rows.map(row => row.column_name);
+      const hasProcessedColumn = existingColumns.includes('processed_for_faq');
+      const hasDirectionColumn = existingColumns.includes('direction');
+      const hasFilteringStatusColumn = existingColumns.includes('filtering_status');
+      
       let query;
-      if (columnCheck.rows.length > 0) {
+      if (hasProcessedColumn) {
+        // Build query with conditional filters based on existing columns
+        let whereConditions = [
+          'e.processed_for_faq = false',
+          'e.body_text IS NOT NULL',
+          'LENGTH(e.body_text) > 50'
+        ];
+        
+        // Only add direction filter if column exists
+        if (hasDirectionColumn) {
+          whereConditions.push("e.direction = 'inbound'");
+        }
+        
+        // Only add filtering_status filter if column exists
+        if (hasFilteringStatusColumn) {
+          whereConditions.push("e.filtering_status = 'qualified'");
+        }
+        
         query = `
           SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
@@ -35,16 +58,30 @@ class EmailService {
             ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
-          WHERE e.processed_for_faq = false
-            AND e.body_text IS NOT NULL
-            AND LENGTH(e.body_text) > 50
-            AND e.direction = 'inbound'
-            AND e.filtering_status = 'qualified'
+          WHERE ${whereConditions.join(' AND ')}
           ORDER BY e.received_at DESC
           LIMIT $1 OFFSET $2
         `;
       } else {
         logger.warn('Column processed_for_faq does not exist, using fallback query');
+        
+        // Build fallback query with conditional filters
+        let whereConditions = [
+          'e.body_text IS NOT NULL',
+          'LENGTH(e.body_text) > 50',
+          'NOT EXISTS (SELECT 1 FROM questions q WHERE q.email_id = e.id)'
+        ];
+        
+        // Only add direction filter if column exists
+        if (hasDirectionColumn) {
+          whereConditions.push("e.direction = 'inbound'");
+        }
+        
+        // Only add filtering_status filter if column exists
+        if (hasFilteringStatusColumn) {
+          whereConditions.push("e.filtering_status = 'qualified'");
+        }
+        
         query = `
           SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
@@ -53,21 +90,19 @@ class EmailService {
             ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
-          WHERE e.body_text IS NOT NULL
-            AND LENGTH(e.body_text) > 50
-            AND e.direction = 'inbound'
-            AND e.filtering_status = 'qualified'
-            AND NOT EXISTS (
-              SELECT 1 FROM questions q
-              WHERE q.email_id = e.id
-            )
+          WHERE ${whereConditions.join(' AND ')}
           ORDER BY e.received_at DESC
           LIMIT $1 OFFSET $2
         `;
       }
       
+      // Log which columns exist for debugging
+      logger.info(`Email processing columns available: processed_for_faq=${hasProcessedColumn}, direction=${hasDirectionColumn}, filtering_status=${hasFilteringStatusColumn}`);
+      
       const result = await db.query(query, [limit, offset]);
       const emails = result.rows;
+      
+      logger.info(`Found ${emails.length} emails before filtering`);
       
       // Filter emails using the new filtering service
       const filteredEmails = [];
