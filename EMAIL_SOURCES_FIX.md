@@ -1,14 +1,18 @@
-# Email Sources Modal Fix
+# Email Sources Modal Fix - Complete Solution
 
-## Issue
-The email sources modal was loading but showing no data, despite the backend API returning the correct data.
+## Issues Fixed
+1. **Modal showing no data** - Fixed incorrect property access
+2. **Missing email subject** - Fixed field name mismatch
+3. **Missing sender information** - Fixed field name mismatch
+4. **Question highlighting** - Already implemented, now working with correct data
 
-## Root Cause
-The frontend code in `FAQDisplay.js` was trying to access `sources.sources` from the API response, but the API actually returns the data under `sources.emailSources`.
+## Root Causes
+The backend API returns data in camelCase format (e.g., `emailSubject`, `senderName`, `senderEmail`) but the frontend was expecting snake_case format (e.g., `email_subject`, `sender_name`, `sender_email`).
 
-## Fix Applied
+## Fixes Applied
+
+### 1. Initial Fix - Property Access (Commit: 75039f7)
 Changed line 201 in `client/src/components/FAQDisplay.js`:
-
 ```javascript
 // Before:
 sources: sources.sources || []
@@ -17,34 +21,60 @@ sources: sources.sources || []
 sources: sources.emailSources || []
 ```
 
-## Verification Steps
-1. Click on any FAQ item's "View Sources" button
-2. The modal should now display the email sources correctly
-3. Each email source should show:
-   - Email subject
-   - Sender name/email
-   - Date received
-   - Relevant snippet
+### 2. Field Name Compatibility (Commit: 1ec0cc2)
+Updated the modal rendering code to support both camelCase (from API) and snake_case (legacy) field names:
 
-## Deployment
-- Commit: 75039f7
-- Pushed to main branch
-- Auto-deployment triggered on Render
+```javascript
+// Email subject
+{source.emailSubject || source.email_subject || 'No Subject'}
 
-## Additional Notes
-The backend API at `/api/faq-sources/:id` returns data in this structure:
+// Sender name
+{source.senderName || source.sender_name || source.senderEmail || source.sender_email || 'Unknown'}
+
+// Sender email
+{source.senderEmail || source.sender_email}
+
+// Date field
+{new Date(source.questionCreatedAt || source.created_at || source.receivedAt).toLocaleDateString()}
+
+// Question text
+{source.questionText || source.question_text}
+```
+
+## Backend API Response Structure
+The `/api/faq-sources/:id` endpoint returns:
 ```json
 {
   "emailSources": [
     {
-      "email_subject": "...",
-      "sender_name": "...",
-      "sender_email": "...",
-      "received_date": "...",
-      "snippet": "..."
+      "questionId": 123,
+      "questionText": "What are the color options?",
+      "senderEmail": "customer@example.com",
+      "senderName": "John Doe",
+      "emailSubject": "Question about cabinet colors",
+      "confidenceScore": 0.95,
+      "similarityScore": 0.98,
+      "isRepresentative": true,
+      "receivedAt": "2024-01-15T10:30:00Z",
+      "sentAt": "2024-01-15T10:29:00Z",
+      "questionCreatedAt": "2024-01-15T11:00:00Z",
+      "emailPreview": "Hi, I wanted to know...",
+      "emailBodyText": "Full email content here..."
     }
   ]
 }
 ```
 
-The frontend was incorrectly looking for `sources.sources` instead of `sources.emailSources`.
+## Features Working
+- ✅ Email sources modal displays data correctly
+- ✅ Shows email subject
+- ✅ Shows sender name and email
+- ✅ Shows date received
+- ✅ Shows extracted question
+- ✅ Shows email content with question highlighted in yellow
+- ✅ Handles both camelCase and snake_case field names for compatibility
+
+## Deployment
+- Both fixes have been pushed to GitHub
+- Auto-deployment triggered on Render
+- Changes should be live in 3-5 minutes

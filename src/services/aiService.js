@@ -31,8 +31,12 @@ class AIService {
 
   /**
    * Detect if an email contains customer questions using AI - enhanced for conversation context
+   * @param {string} emailText - The email body text
+   * @param {string} emailSubject - The email subject
+   * @param {Array} threadEmails - Other emails in the thread for context
+   * @param {Object} emailMetadata - Additional email metadata including sender info
    */
-  async detectQuestions(emailText, emailSubject = '', threadEmails = []) {
+  async detectQuestions(emailText, emailSubject = '', threadEmails = [], emailMetadata = {}) {
     try {
       const fullText = `Subject: ${emailSubject}\n\nBody: ${emailText}`;
       
@@ -75,6 +79,11 @@ Email:
 ${fullText}
 ${conversationContext}
 
+Email Metadata:
+- Sender: ${emailMetadata.senderEmail || 'Unknown'}
+- Has been responded to: ${emailMetadata.hasResponse || false}
+- Is from connected account: ${emailMetadata.isFromConnectedAccount || false}
+
 Instructions:
 1. ONLY extract questions from CUSTOMERS, not from business/company representatives
 2. Focus on genuine customer questions that would be commonly asked by other customers
@@ -89,8 +98,10 @@ Instructions:
    - Very personal or account-specific details
    - Spam or promotional content
    - Questions already fully answered in the same email
+   - Emails that have NOT been responded to by the business
 7. Rate your confidence (0-1) for each question based on its FAQ suitability
 8. Consider the conversation context to better understand if this is a customer asking a business
+9. Only include questions from emails that have received a response from the business
 
 Respond in JSON format:
 {

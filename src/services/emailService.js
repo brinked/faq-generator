@@ -2,30 +2,36 @@ const { google } = require('googleapis');
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const { encrypt, decrypt } = require('../utils/encryption');
+const EmailFilteringService = require('./emailFilteringService');
 
 class EmailService {
   constructor() {
     this.gmail = null;
+    this.filteringService = new EmailFilteringService();
   }
 
   /**
-   * Get emails for processing with safe column handling
+   * Get emails for processing with safe column handling and filtering
    */
   async getEmailsForProcessing(limit = 100, offset = 0) {
     try {
+      // Get all connected accounts for filtering
+      const connectedAccounts = await this.getAccounts();
+      
       const columnCheck = await db.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'emails' 
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'emails'
         AND column_name = 'processed_for_faq'
       `);
       
       let query;
       if (columnCheck.rows.length > 0) {
         query = `
-          SELECT 
+          SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
             e.body_text, e.sender_email, e.sender_name, e.received_at,
+            e.recipient_emails, e.cc_emails,
             ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
@@ -38,16 +44,17 @@ class EmailService {
       } else {
         logger.warn('Column processed_for_faq does not exist, using fallback query');
         query = `
-          SELECT 
+          SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
             e.body_text, e.sender_email, e.sender_name, e.received_at,
+            e.recipient_emails, e.cc_emails,
             ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
           WHERE e.body_text IS NOT NULL
             AND LENGTH(e.body_text) > 50
             AND NOT EXISTS (
-              SELECT 1 FROM questions q 
+              SELECT 1 FROM questions q
               WHERE q.email_id = e.id
             )
           ORDER BY e.received_at DESC
@@ -56,7 +63,24 @@ class EmailService {
       }
       
       const result = await db.query(query, [limit, offset]);
-      return result.rows;
+      const emails = result.rows;
+      
+      // Filter emails using the new filtering service
+      const filteredEmails = [];
+      for (const email of emails) {
+        const qualification = await this.filteringService.doesEmailQualifyForFAQ(email, connectedAccounts);
+        if (qualification.qualifies) {
+          filteredEmails.push({
+            ...email,
+            qualification
+          });
+        } else {
+          logger.debug(`Email ${email.id} disqualified: ${qualification.reason}`);
+        }
+      }
+      
+      logger.info(`Filtered ${filteredEmails.length} qualifying emails from ${emails.length} total`);
+      return filteredEmails;
     } catch (error) {
       logger.error('Error getting emails for processing:', error);
       throw error;

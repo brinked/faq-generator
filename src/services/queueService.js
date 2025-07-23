@@ -124,14 +124,25 @@ questionProcessingQueue.process('process-account-emails', async (job) => {
           emailBatch.map(email => emailService.markEmailProcessed(email.id, 'processing'))
         );
         
-        // Detect questions for all emails in batch concurrently
+        // Detect questions for all emails in batch with metadata
         const detectionResults = await Promise.allSettled(
-          emailBatch.map(email =>
-            aiService.detectQuestions(
+          emailBatch.map(async (email) => {
+            // Check if this email has a response
+            const threadAnalysis = await filteringService.analyzeEmailThread(email, connectedAccounts);
+            
+            return aiService.detectQuestions(
               (email.body_text || '').substring(0, 10000), // Limit content size
-              email.subject || ''
-            )
-          )
+              email.subject || '',
+              [], // Thread emails - could be populated if needed
+              {
+                senderEmail: email.sender_email,
+                hasResponse: threadAnalysis.hasResponseFromBusiness,
+                isFromConnectedAccount: connectedAccounts.some(acc =>
+                  acc.email_address.toLowerCase() === (email.sender_email || '').toLowerCase()
+                )
+              }
+            );
+          })
         );
         
         // Collect all questions from successful detections
@@ -244,7 +255,12 @@ questionProcessingQueue.process('process-account-emails', async (job) => {
     
     logger.info(`Question processing completed for account ${accountId}: ${processed} emails processed`);
     
-    return { processed, total: emails.length };
+    return {
+      processed,
+      total: emails.length,
+      qualified: qualifiedEmails.length,
+      disqualified: emails.length - qualifiedEmails.length
+    };
     
   } catch (error) {
     logger.error(`Question processing failed for account ${accountId}:`, error);
