@@ -1007,4 +1007,32 @@ async function batchUpdateEmailStatuses(emailUpdates, emailService) {
   }
 }
 
+/**
+ * Manually trigger email direction fix
+ */
+router.post('/fix-direction', async (req, res) => {
+  try {
+    logger.info('Manual email direction fix triggered via API');
+    
+    // Run the fix
+    const fixStats = await emailService.fixEmailDirectionAndResponses();
+    
+    logger.info('Email direction fix completed', fixStats);
+    
+    res.json({
+      success: true,
+      message: 'Email direction fix completed successfully',
+      stats: fixStats
+    });
+    
+  } catch (error) {
+    logger.error('Error running email direction fix:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to run email direction fix',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;

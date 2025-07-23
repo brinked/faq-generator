@@ -215,6 +215,19 @@ class EmailService {
         errors: results.errors.length
       });
       
+      // After syncing all accounts, fix email directions and analyze responses
+      if (results.totalSynced > 0) {
+        try {
+          logger.info('Running email direction fix and response analysis...');
+          const fixStats = await this.fixEmailDirectionAndResponses();
+          results.fixStats = fixStats;
+          logger.info('Email direction fix completed', fixStats);
+        } catch (error) {
+          logger.error('Error running email direction fix:', error);
+          results.fixError = error.message;
+        }
+      }
+      
       return results;
       
     } catch (error) {
@@ -354,29 +367,259 @@ class EmailService {
   }
 
   /**
-   * Save emails to the database
+   * Save emails to the database with automatic direction detection
    */
   async saveEmails(accountId, emails) {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
       
+      // Get the account email for direction detection
+      const accountResult = await client.query(
+        'SELECT email_address FROM email_accounts WHERE id = $1',
+        [accountId]
+      );
+      const accountEmail = accountResult.rows[0]?.email_address?.toLowerCase();
+      
       for (const email of emails) {
-        const query = `
-          INSERT INTO emails (account_id, message_id, thread_id, subject, body_text, sender_email, sender_name, received_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (account_id, message_id) DO NOTHING
-        `;
-        await client.query(query, [
-          accountId, email.id, email.threadId, email.subject,
-          email.bodyText, email.from, email.from, email.internalDate
-        ]);
+        // Determine email direction
+        const senderEmail = email.from?.toLowerCase() || '';
+        const direction = senderEmail.includes(accountEmail) ? 'outbound' : 'inbound';
+        
+        // Check if direction column exists
+        const columnCheck = await client.query(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'emails' AND column_name = 'direction'
+        `);
+        
+        let query;
+        let params;
+        
+        if (columnCheck.rows.length > 0) {
+          // Include direction in insert
+          query = `
+            INSERT INTO emails (account_id, message_id, thread_id, subject, body_text, sender_email, sender_name, received_at, direction)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (account_id, message_id)
+            DO UPDATE SET direction = EXCLUDED.direction
+            WHERE emails.direction IS NULL
+          `;
+          params = [
+            accountId, email.id, email.threadId, email.subject,
+            email.bodyText, email.from, email.from, email.internalDate, direction
+          ];
+        } else {
+          // Fallback without direction
+          query = `
+            INSERT INTO emails (account_id, message_id, thread_id, subject, body_text, sender_email, sender_name, received_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (account_id, message_id) DO NOTHING
+          `;
+          params = [
+            accountId, email.id, email.threadId, email.subject,
+            email.bodyText, email.from, email.from, email.internalDate
+          ];
+        }
+        
+        await client.query(query, params);
       }
       
       await client.query('COMMIT');
+      
+      // Note: Thread analysis is now done in fixEmailDirectionAndResponses
+      // which is called after all accounts are synced
+      
     } catch (error) {
       await client.query('ROLLBACK');
       logger.error('Error saving emails:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Analyze email threads to detect responses
+   */
+  async analyzeThreadsForResponses(client) {
+    try {
+      // Check if required columns exist
+      const columnCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'emails'
+        AND column_name IN ('direction', 'has_response')
+      `);
+      
+      if (columnCheck.rows.length < 2) {
+        return; // Skip if columns don't exist
+      }
+      
+      // Get threads with both inbound and outbound emails
+      const threadsQuery = `
+        SELECT DISTINCT thread_id
+        FROM emails
+        WHERE thread_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM emails e2
+          WHERE e2.thread_id = emails.thread_id
+          AND e2.direction = 'inbound'
+        )
+        AND EXISTS (
+          SELECT 1 FROM emails e3
+          WHERE e3.thread_id = emails.thread_id
+          AND e3.direction = 'outbound'
+        )
+      `;
+      
+      const threads = await client.query(threadsQuery);
+      
+      // Mark inbound emails in these threads as having responses
+      if (threads.rows.length > 0) {
+        const threadIds = threads.rows.map(t => t.thread_id);
+        await client.query(`
+          UPDATE emails
+          SET has_response = true
+          WHERE thread_id = ANY($1::text[])
+          AND direction = 'inbound'
+          AND (has_response IS NULL OR has_response = false)
+        `, [threadIds]);
+      }
+      
+    } catch (error) {
+      logger.error('Error analyzing threads for responses:', error);
+      // Don't throw - this is a non-critical operation
+    }
+  }
+
+  /**
+   * Fix email direction and analyze responses - integrated from fix-email-direction.js
+   * This runs automatically after saving emails
+   */
+  async fixEmailDirectionAndResponses() {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      logger.info('🔧 Fixing Email Direction Classification...');
+      
+      // Get connected accounts
+      const accountsResult = await client.query(`
+        SELECT id, email_address
+        FROM email_accounts
+        WHERE status = 'active'
+      `);
+      const connectedAccounts = accountsResult.rows;
+      logger.info(`Found ${connectedAccounts.length} active accounts`);
+      
+      // Reset all directions to inbound first
+      await client.query(`UPDATE emails SET direction = 'inbound'`);
+      
+      // Mark emails from business accounts as outbound
+      let totalOutbound = 0;
+      
+      for (const account of connectedAccounts) {
+        const email = account.email_address.toLowerCase();
+        
+        // Update emails where sender contains this email address
+        const result = await client.query(`
+          UPDATE emails
+          SET direction = 'outbound'
+          WHERE LOWER(sender_email) LIKE $1
+          OR LOWER(sender_email) = $2
+        `, [`%${email}%`, email]);
+        
+        logger.info(`  ${email}: ${result.rowCount} emails marked as outbound`);
+        totalOutbound += result.rowCount;
+      }
+      
+      logger.info(`Total outbound emails: ${totalOutbound}`);
+      
+      // Analyze threads for responses
+      const threadsResult = await client.query(`
+        SELECT DISTINCT thread_id
+        FROM emails
+        WHERE thread_id IS NOT NULL
+      `);
+      
+      let threadsWithResponses = 0;
+      let emailsMarkedWithResponse = 0;
+      
+      for (const thread of threadsResult.rows) {
+        // Get all emails in this thread
+        const threadEmails = await client.query(`
+          SELECT id, direction, received_at
+          FROM emails
+          WHERE thread_id = $1
+          ORDER BY received_at ASC
+        `, [thread.thread_id]);
+        
+        const hasInbound = threadEmails.rows.some(e => e.direction === 'inbound');
+        const hasOutbound = threadEmails.rows.some(e => e.direction === 'outbound');
+        
+        if (hasInbound && hasOutbound) {
+          threadsWithResponses++;
+          
+          // Mark inbound emails as having responses
+          const updateResult = await client.query(`
+            UPDATE emails
+            SET has_response = true
+            WHERE thread_id = $1
+            AND direction = 'inbound'
+          `, [thread.thread_id]);
+          
+          emailsMarkedWithResponse += updateResult.rowCount;
+        }
+      }
+      
+      logger.info(`Found ${threadsWithResponses} threads with responses`);
+      logger.info(`Marked ${emailsMarkedWithResponse} customer emails as having responses`);
+      
+      // Update filtering status
+      // Mark outbound emails as filtered
+      await client.query(`
+        UPDATE emails
+        SET filtering_status = 'filtered_out',
+            filtering_reason = 'Email from connected business account'
+        WHERE direction = 'outbound'
+      `);
+      
+      // Mark inbound without responses as filtered
+      await client.query(`
+        UPDATE emails
+        SET filtering_status = 'filtered_out',
+            filtering_reason = 'No response from business'
+        WHERE direction = 'inbound'
+        AND (has_response IS NULL OR has_response = false)
+      `);
+      
+      // Mark inbound with responses as qualified
+      const qualifiedResult = await client.query(`
+        UPDATE emails
+        SET filtering_status = 'qualified'
+        WHERE direction = 'inbound'
+        AND has_response = true
+      `);
+      
+      logger.info(`Marked ${qualifiedResult.rowCount} emails as qualified for FAQ generation`);
+      
+      await client.query('COMMIT');
+      
+      // Return statistics
+      const finalStats = await client.query(`
+        SELECT
+          COUNT(*) as total_emails,
+          COUNT(*) FILTER (WHERE direction = 'inbound') as inbound_emails,
+          COUNT(*) FILTER (WHERE direction = 'outbound') as outbound_emails,
+          COUNT(*) FILTER (WHERE has_response = true) as emails_with_responses,
+          COUNT(*) FILTER (WHERE filtering_status = 'qualified') as qualified_emails
+        FROM emails
+      `);
+      
+      return finalStats.rows[0];
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error fixing email direction:', error);
       throw error;
     } finally {
       client.release();
