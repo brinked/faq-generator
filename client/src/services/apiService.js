@@ -301,6 +301,31 @@ class ApiService {
     return this.request('/api/health');
   }
 
+  // FAQ Processing
+  async getFAQStatus() {
+    return this.get('/api/sync/faq-status');
+  }
+
+  async processFAQs(limit = 100) {
+    return this.post('/api/sync/process-faqs', { limit });
+  }
+
+  async generateFAQs(options = {}) {
+    const defaultOptions = {
+      minQuestionCount: 1,
+      maxFAQs: 20,
+      forceRegenerate: false,
+      autoFix: true
+    };
+    return this.post('/api/sync/generate-faqs', { ...defaultOptions, ...options });
+  }
+
+  // Email Filtering Stats
+  async getEmailFilteringStats(accountId = null) {
+    const endpoint = accountId ? `/api/emails/stats/filtering?accountId=${accountId}` : '/api/emails/stats/filtering';
+    return this.get(endpoint);
+  }
+
   // OAuth URL generation
   async getGmailAuthUrl() {
     const response = await this.request('/api/auth/gmail/url');
