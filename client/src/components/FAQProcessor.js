@@ -37,8 +37,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
 
   const loadStatus = async () => {
     try {
-      const response = await fetch('/api/sync/faq-status');
-      const data = await response.json();
+      const data = await apiService.getFAQStatus();
       if (data.success) {
         setStatus(data.status);
       }
@@ -59,12 +58,12 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
     addLog(`✅ Processing complete!`);
     addLog(`📊 Results: ${data.processed} emails processed, ${data.questionsFound} questions found`);
     addLog(`📚 Created ${data.faqGroupsCreated} FAQ groups from ${data.questionsGrouped} questions`);
-    
+
     toast.success(`FAQ processing complete! Found ${data.questionsFound} questions and created ${data.faqGroupsCreated} FAQ groups.`);
-    
+
     // Reload status
     loadStatus();
-    
+
     // Notify parent component
     if (onProcessingComplete) {
       onProcessingComplete(data);
@@ -95,12 +94,12 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
     addLog(`✅ FAQ generation complete!`);
     addLog(`📚 Results: ${data.generated} FAQs generated, ${data.updated} FAQs updated`);
     addLog(`📊 Processed ${data.processed} questions in ${data.clusters} clusters`);
-    
+
     toast.success(`FAQ generation complete! Generated ${data.generated} FAQs and updated ${data.updated} existing ones.`);
-    
+
     // Reload status
     loadStatus();
-    
+
     // Notify parent component
     if (onProcessingComplete) {
       onProcessingComplete(data);
@@ -126,16 +125,8 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       setLogs([]);
       addLog(`🚀 Starting FAQ processing for up to ${limit} emails...`);
 
-      const response = await fetch('/api/sync/process-faqs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ limit }),
-      });
+      const data = await apiService.processFAQs(limit);
 
-      const data = await response.json();
-      
       if (data.success) {
         addLog(`✅ Processing started for ${data.emailCount} emails`);
         toast.success(`Started processing ${data.emailCount} emails`);
@@ -155,21 +146,14 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       setProgress(null);
       addLog(`🧠 Starting FAQ generation with auto-fix...`);
 
-      const response = await fetch('/api/sync/generate-faqs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          minQuestionCount: 1,
-          maxFAQs: 20,
-          forceRegenerate: false,
-          autoFix: true
-        }),
+      const data = await apiService.generateFAQs({
+        minQuestionCount: 1,
+        maxFAQs: 20,
+        forceRegenerate: false,
+        autoFix: true
       });
 
-      const data = await response.json();
-      
+
       if (data.success) {
         addLog(`✅ FAQ generation started with auto-fix enabled`);
         toast.success('FAQ generation started! This will automatically fix any data issues.');
@@ -205,23 +189,23 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       {/* Status Overview */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">FAQ Processing Center</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-blue-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">{status.total_emails}</div>
             <div className="text-sm text-gray-600">Total Emails</div>
           </div>
-          
+
           <div className="bg-green-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-green-600">{status.processed_emails}</div>
             <div className="text-sm text-gray-600">Processed</div>
           </div>
-          
+
           <div className="bg-yellow-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-yellow-600">{status.pending_emails}</div>
             <div className="text-sm text-gray-600">Pending</div>
           </div>
-          
+
           <div className="bg-purple-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-purple-600">{status.total_questions}</div>
             <div className="text-sm text-gray-600">Questions Found</div>
@@ -235,7 +219,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
             <span>{status.processing_progress}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
+            <div
               className="bg-blue-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${status.processing_progress}%` }}
             ></div>
@@ -251,7 +235,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
           >
             {processing ? 'Processing...' : 'Process 50 Emails'}
           </button>
-          
+
           <button
             onClick={() => startProcessing(100)}
             disabled={processing}
@@ -259,7 +243,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
           >
             {processing ? 'Processing...' : 'Process 100 Emails'}
           </button>
-          
+
           <button
             onClick={() => startProcessing(status.pending_emails)}
             disabled={processing || status.pending_emails === 0}
@@ -267,7 +251,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
           >
             {processing ? 'Processing...' : `Process All ${status.pending_emails} Emails`}
           </button>
-          
+
           <button
             onClick={generateFAQs}
             disabled={processing}
@@ -275,7 +259,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
           >
             {processing ? 'Generating...' : '🧠 Generate FAQs'}
           </button>
-          
+
           <button
             onClick={loadStatus}
             disabled={processing}

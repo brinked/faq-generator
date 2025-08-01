@@ -16,9 +16,8 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
     try {
       setLoading(true);
       const accountId = selectedAccount === 'all' ? null : selectedAccount;
-      const response = await fetch(`/api/emails/stats/filtering${accountId ? `?accountId=${accountId}` : ''}`);
-      const data = await response.json();
-      
+      const data = await apiService.getEmailFilteringStats(accountId);
+
       if (data.success) {
         setStats(data.stats);
       }
@@ -60,7 +59,7 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
             Shows how the improved filtering reduces spam and irrelevant emails
           </p>
         </div>
-        
+
         {connectedAccounts.length > 1 && (
           <select
             value={selectedAccount}
@@ -83,7 +82,7 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
           <div className="text-2xl font-bold text-blue-600">{stats.total_emails}</div>
           <div className="text-sm text-gray-600">Total Emails</div>
         </div>
-        
+
         <div className="bg-green-50 p-4 rounded-lg border border-green-200">
           <div className="text-2xl font-bold text-green-600">{stats.conversation_emails}</div>
           <div className="text-sm text-gray-600">In Conversations</div>
@@ -91,7 +90,7 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
             {stats.conversation_percentage}% of total
           </div>
         </div>
-        
+
         <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
           <div className="text-2xl font-bold text-yellow-600">{stats.valid_for_processing}</div>
           <div className="text-sm text-gray-600">Valid for Processing</div>
@@ -99,7 +98,7 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
             {stats.valid_processing_percentage}% of pending
           </div>
         </div>
-        
+
         <div className="bg-red-50 p-4 rounded-lg border border-red-200">
           <div className="text-2xl font-bold text-red-600">{stats.filtering_impact.emails_filtered_out}</div>
           <div className="text-sm text-gray-600">Filtered Out</div>
@@ -112,7 +111,7 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
       {/* Filtering Impact */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h4 className="text-lg font-semibold text-gray-900 mb-4">Filtering Impact</h4>
-        
+
         <div className="space-y-4">
           {/* Progress bar showing conversation vs standalone emails */}
           <div>
@@ -122,12 +121,12 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
               <div className="flex h-full">
-                <div 
+                <div
                   className="bg-green-500 transition-all duration-300"
                   style={{ width: `${stats.conversation_percentage}%` }}
                   title={`${stats.conversation_emails} conversation emails`}
                 ></div>
-                <div 
+                <div
                   className="bg-gray-400 transition-all duration-300"
                   style={{ width: `${100 - stats.conversation_percentage}%` }}
                   title={`${stats.standalone_emails} standalone emails`}
@@ -148,12 +147,12 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
               <div className="flex h-full">
-                <div 
+                <div
                   className="bg-blue-500 transition-all duration-300"
                   style={{ width: `${stats.valid_processing_percentage}%` }}
                   title={`${stats.valid_for_processing} valid for processing`}
                 ></div>
-                <div 
+                <div
                   className="bg-red-400 transition-all duration-300"
                   style={{ width: `${100 - stats.valid_processing_percentage}%` }}
                   title={`${stats.filtering_impact.emails_filtered_out} filtered out`}

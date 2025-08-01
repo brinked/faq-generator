@@ -4,12 +4,12 @@ const getApiBaseUrl = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL;
   }
-  
+
   // In production, use the same domain as the frontend
   if (process.env.NODE_ENV === 'production') {
     return window.location.origin;
   }
-  
+
   // In development, use localhost
   return 'http://localhost:3000';
 };
@@ -19,6 +19,44 @@ const API_BASE_URL = getApiBaseUrl();
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
+  }
+
+  async get(endpoint, options = {}) {
+    return this.request(endpoint, {
+      method: 'GET',
+      ...options,
+    });
+  }
+
+  async post(endpoint, data = null, options = {}) {
+    return this.request(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
+  async put(endpoint, data = null, options = {}) {
+    return this.request(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
+  async patch(endpoint, data = null, options = {}) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
+  async delete(endpoint, options = {}) {
+    return this.request(endpoint, {
+      method: 'DELETE',
+      ...options,
+    });
   }
 
   // Helper method for making API requests
@@ -34,7 +72,7 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
@@ -60,7 +98,7 @@ class ApiService {
   async connectOutlookAccount() {
     return this.request('/api/auth/outlook');
   }
-  
+
   async getGmailAuthUrl() {
     console.log('Requesting Gmail auth URL');
     const response = await this.request('/api/auth/gmail/url');
@@ -123,20 +161,20 @@ class ApiService {
   // FAQ management
   async getFAQs(filters = {}) {
     const queryParams = new URLSearchParams();
-    
+
     if (filters.search) queryParams.append('search', filters.search);
     if (filters.category) queryParams.append('category', filters.category);
     if (filters.sortBy) queryParams.append('sortBy', filters.sortBy);
-    
+
     // Set a high limit to get all FAQs by default, unless specifically limited
     const limit = filters.limit || 1000;
     queryParams.append('limit', limit);
-    
+
     if (filters.offset) queryParams.append('offset', filters.offset);
 
     const queryString = queryParams.toString();
     const endpoint = `/api/faqs?${queryString}`;
-    
+
     const response = await this.request(endpoint);
     // The API returns { success: true, faqs: [...], pagination: {...} }
     // But the component expects just the array
@@ -212,7 +250,7 @@ class ApiService {
   async exportEmails(format = 'json', filters = {}) {
     const queryParams = new URLSearchParams();
     queryParams.append('format', format);
-    
+
     Object.entries(filters).forEach(([key, value]) => {
       if (value) queryParams.append(key, value);
     });
@@ -239,7 +277,7 @@ class ApiService {
   async searchEmails(query, filters = {}) {
     const queryParams = new URLSearchParams();
     queryParams.append('q', query);
-    
+
     Object.entries(filters).forEach(([key, value]) => {
       if (value) queryParams.append(key, value);
     });
@@ -250,7 +288,7 @@ class ApiService {
   async searchFAQs(query, filters = {}) {
     const queryParams = new URLSearchParams();
     queryParams.append('q', query);
-    
+
     Object.entries(filters).forEach(([key, value]) => {
       if (value) queryParams.append(key, value);
     });
@@ -261,6 +299,31 @@ class ApiService {
   // Health check
   async healthCheck() {
     return this.request('/api/health');
+  }
+
+  // FAQ Processing
+  async getFAQStatus() {
+    return this.get('/api/sync/faq-status');
+  }
+
+  async processFAQs(limit = 100) {
+    return this.post('/api/sync/process-faqs', { limit });
+  }
+
+  async generateFAQs(options = {}) {
+    const defaultOptions = {
+      minQuestionCount: 1,
+      maxFAQs: 20,
+      forceRegenerate: false,
+      autoFix: true
+    };
+    return this.post('/api/sync/generate-faqs', { ...defaultOptions, ...options });
+  }
+
+  // Email Filtering Stats
+  async getEmailFilteringStats(accountId = null) {
+    const endpoint = accountId ? `/api/emails/stats/filtering?accountId=${accountId}` : '/api/emails/stats/filtering';
+    return this.get(endpoint);
   }
 
   // OAuth URL generation
@@ -279,7 +342,7 @@ class ApiService {
     try {
       const response = await fetch(url);
       const blob = await response.blob();
-      
+
       // Create download link
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

@@ -17,7 +17,7 @@ class EmailService {
     try {
       // Get all connected accounts for filtering
       const connectedAccounts = await this.getAccounts();
-      
+
       // Check which columns exist
       const columnCheck = await db.query(`
         SELECT column_name
@@ -25,12 +25,12 @@ class EmailService {
         WHERE table_name = 'emails'
         AND column_name IN ('processed_for_faq', 'direction', 'filtering_status')
       `);
-      
+
       const existingColumns = columnCheck.rows.map(row => row.column_name);
       const hasProcessedColumn = existingColumns.includes('processed_for_faq');
       const hasDirectionColumn = existingColumns.includes('direction');
       const hasFilteringStatusColumn = existingColumns.includes('filtering_status');
-      
+
       let query;
       if (hasProcessedColumn) {
         // Build query with conditional filters based on existing columns
@@ -39,17 +39,17 @@ class EmailService {
           'e.body_text IS NOT NULL',
           'LENGTH(e.body_text) > 50'
         ];
-        
+
         // Only add direction filter if column exists
         if (hasDirectionColumn) {
           whereConditions.push("e.direction = 'inbound'");
         }
-        
+
         // Only add filtering_status filter if column exists
         if (hasFilteringStatusColumn) {
           whereConditions.push("e.filtering_status = 'qualified'");
         }
-        
+
         query = `
           SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
@@ -64,24 +64,24 @@ class EmailService {
         `;
       } else {
         logger.warn('Column processed_for_faq does not exist, using fallback query');
-        
+
         // Build fallback query with conditional filters
         let whereConditions = [
           'e.body_text IS NOT NULL',
           'LENGTH(e.body_text) > 50',
           'NOT EXISTS (SELECT 1 FROM questions q WHERE q.email_id = e.id)'
         ];
-        
+
         // Only add direction filter if column exists
         if (hasDirectionColumn) {
           whereConditions.push("e.direction = 'inbound'");
         }
-        
+
         // Only add filtering_status filter if column exists
         if (hasFilteringStatusColumn) {
           whereConditions.push("e.filtering_status = 'qualified'");
         }
-        
+
         query = `
           SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
@@ -95,15 +95,15 @@ class EmailService {
           LIMIT $1 OFFSET $2
         `;
       }
-      
+
       // Log which columns exist for debugging
       logger.info(`Email processing columns available: processed_for_faq=${hasProcessedColumn}, direction=${hasDirectionColumn}, filtering_status=${hasFilteringStatusColumn}`);
-      
+
       const result = await db.query(query, [limit, offset]);
       const emails = result.rows;
-      
+
       logger.info(`Found ${emails.length} emails before filtering`);
-      
+
       // Filter emails using the new filtering service
       const filteredEmails = [];
       for (const email of emails) {
@@ -117,7 +117,7 @@ class EmailService {
           logger.debug(`Email ${email.id} disqualified: ${qualification.reason}`);
         }
       }
-      
+
       logger.info(`Filtered ${filteredEmails.length} qualifying emails from ${emails.length} total`);
       return filteredEmails;
     } catch (error) {
@@ -133,18 +133,18 @@ class EmailService {
     try {
       let query = 'SELECT * FROM email_accounts';
       const params = [];
-      
+
       if (accountId) {
         query += ' WHERE id = $1';
         params.push(accountId);
       }
-      
+
       const result = await db.query(query, params);
-      
+
       if (accountId && result.rows.length === 0) {
         throw new Error('Account not found');
       }
-      
+
       return accountId ? result.rows[0] : result.rows;
     } catch (error) {
       logger.error('Error getting account(s):', error);
@@ -159,7 +159,7 @@ class EmailService {
     const { maxEmails = 100 } = options;
     try {
       const account = await this.getAccountById(accountId);
-      
+
       if (account.provider === 'gmail') {
         return await this.syncGmailAccount(account, maxEmails);
       } else if (account.provider === 'outlook') {
@@ -178,22 +178,22 @@ class EmailService {
    */
   async syncAllAccounts(options = {}) {
     const { maxEmails = 100, skipRecentlyProcessed = false } = options;
-    
+
     try {
       logger.info('Starting sync for all active accounts', { maxEmails, skipRecentlyProcessed });
-      
+
       // Get all active accounts
       const accounts = await this.getAccounts();
       const activeAccounts = accounts.filter(acc => acc.status === 'active');
-      
+
       logger.info(`Found ${activeAccounts.length} active accounts to sync`);
-      
+
       const results = {
         accounts: [],
         totalSynced: 0,
         errors: []
       };
-      
+
       // Sync each account
       for (const account of activeAccounts) {
         try {
@@ -201,7 +201,7 @@ class EmailService {
           if (skipRecentlyProcessed && account.last_sync_at) {
             const lastSync = new Date(account.last_sync_at);
             const hoursSinceSync = (Date.now() - lastSync.getTime()) / (1000 * 60 * 60);
-            
+
             if (hoursSinceSync < 1) {
               logger.info(`Skipping account ${account.id} - synced ${hoursSinceSync.toFixed(2)} hours ago`);
               results.accounts.push({
@@ -213,25 +213,25 @@ class EmailService {
               continue;
             }
           }
-          
+
           logger.info(`Syncing account ${account.id} (${account.email_address})`);
           const syncResult = await this.syncAccount(account.id, { maxEmails });
-          
+
           results.accounts.push({
             accountId: account.id,
             email: account.email_address,
             status: 'success',
             synced: syncResult.synced || 0
           });
-          
+
           results.totalSynced += (syncResult.synced || 0);
-          
+
           // Update last sync time
           await db.query(
             'UPDATE email_accounts SET last_sync_at = NOW() WHERE id = $1',
             [account.id]
           );
-          
+
         } catch (error) {
           logger.error(`Error syncing account ${account.id}:`, error);
           results.errors.push({
@@ -247,13 +247,13 @@ class EmailService {
           });
         }
       }
-      
+
       logger.info('Completed sync for all accounts', {
         totalAccounts: activeAccounts.length,
         totalSynced: results.totalSynced,
         errors: results.errors.length
       });
-      
+
       // After syncing all accounts, fix email directions and analyze responses
       if (results.totalSynced > 0) {
         try {
@@ -266,9 +266,9 @@ class EmailService {
           results.fixError = error.message;
         }
       }
-      
+
       return results;
-      
+
     } catch (error) {
       logger.error('Error in syncAllAccounts:', error);
       throw error;
@@ -280,46 +280,51 @@ class EmailService {
    */
   async syncGmailAccount(account, maxEmails) {
     const gmailService = new (require('./gmailService'))();
+
+    // Decrypt the tokens before using them
+    const decryptedAccessToken = decrypt(account.access_token);
+    const decryptedRefreshToken = decrypt(account.refresh_token);
+
     gmailService.setCredentials({
-      access_token: account.access_token,
-      refresh_token: account.refresh_token,
+      access_token: decryptedAccessToken,
+      refresh_token: decryptedRefreshToken,
       expiry_date: account.token_expires_at
     });
 
     try {
       const syncResult = await gmailService.syncEmails(account.id, { maxEmails });
-      
+
       if (syncResult.messages && syncResult.messages.length > 0) {
         await this.saveEmails(account.id, syncResult.messages);
       }
-      
+
       return { synced: syncResult.processed };
     } catch (error) {
       if (error.originalError?.response?.data?.error === 'invalid_grant') {
         logger.warn(`Account ${account.id} has an invalid grant. Attempting token refresh.`);
-        
+
         try {
           // Attempt to refresh the token
           const newCredentials = await gmailService.refreshAccessToken(account.refresh_token);
-          
+
           if (newCredentials && newCredentials.access_token) {
             logger.info(`Successfully refreshed token for account ${account.id}`);
-            
+
             // Update the account with new credentials
             await this.updateAccountTokens(account.id, {
               access_token: newCredentials.access_token,
               refresh_token: newCredentials.refresh_token || account.refresh_token,
               token_expires_at: newCredentials.expiry_date
             });
-            
+
             // Set the new credentials and retry the sync
             gmailService.setCredentials(newCredentials);
             const syncResult = await gmailService.syncEmails(account.id, { maxEmails });
-            
+
             if (syncResult.messages && syncResult.messages.length > 0) {
               await this.saveEmails(account.id, syncResult.messages);
             }
-            
+
             return { synced: syncResult.processed };
           } else {
             throw new Error('Token refresh returned invalid credentials');
@@ -412,28 +417,28 @@ class EmailService {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
-      
+
       // Get the account email for direction detection
       const accountResult = await client.query(
         'SELECT email_address FROM email_accounts WHERE id = $1',
         [accountId]
       );
       const accountEmail = accountResult.rows[0]?.email_address?.toLowerCase();
-      
+
       for (const email of emails) {
         // Determine email direction
         const senderEmail = email.from?.toLowerCase() || '';
         const direction = senderEmail.includes(accountEmail) ? 'outbound' : 'inbound';
-        
+
         // Check if direction column exists
         const columnCheck = await client.query(`
           SELECT column_name FROM information_schema.columns
           WHERE table_name = 'emails' AND column_name = 'direction'
         `);
-        
+
         let query;
         let params;
-        
+
         if (columnCheck.rows.length > 0) {
           // Include direction in insert
           query = `
@@ -459,15 +464,15 @@ class EmailService {
             email.bodyText, email.from, email.from, email.internalDate
           ];
         }
-        
+
         await client.query(query, params);
       }
-      
+
       await client.query('COMMIT');
-      
+
       // Note: Thread analysis is now done in fixEmailDirectionAndResponses
       // which is called after all accounts are synced
-      
+
     } catch (error) {
       await client.query('ROLLBACK');
       logger.error('Error saving emails:', error);
@@ -488,11 +493,11 @@ class EmailService {
         WHERE table_name = 'emails'
         AND column_name IN ('direction', 'has_response')
       `);
-      
+
       if (columnCheck.rows.length < 2) {
         return; // Skip if columns don't exist
       }
-      
+
       // Get threads with both inbound and outbound emails
       const threadsQuery = `
         SELECT DISTINCT thread_id
@@ -509,9 +514,9 @@ class EmailService {
           AND e3.direction = 'outbound'
         )
       `;
-      
+
       const threads = await client.query(threadsQuery);
-      
+
       // Mark inbound emails in these threads as having responses
       if (threads.rows.length > 0) {
         const threadIds = threads.rows.map(t => t.thread_id);
@@ -523,7 +528,7 @@ class EmailService {
           AND (has_response IS NULL OR has_response = false)
         `, [threadIds]);
       }
-      
+
     } catch (error) {
       logger.error('Error analyzing threads for responses:', error);
       // Don't throw - this is a non-critical operation
@@ -538,9 +543,9 @@ class EmailService {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
-      
+
       logger.info('🔧 Fixing Email Direction Classification...');
-      
+
       // Get connected accounts
       const accountsResult = await client.query(`
         SELECT id, email_address
@@ -549,16 +554,16 @@ class EmailService {
       `);
       const connectedAccounts = accountsResult.rows;
       logger.info(`Found ${connectedAccounts.length} active accounts`);
-      
+
       // Reset all directions to inbound first
       await client.query(`UPDATE emails SET direction = 'inbound'`);
-      
+
       // Mark emails from business accounts as outbound
       let totalOutbound = 0;
-      
+
       for (const account of connectedAccounts) {
         const email = account.email_address.toLowerCase();
-        
+
         // Update emails where sender contains this email address
         const result = await client.query(`
           UPDATE emails
@@ -566,23 +571,23 @@ class EmailService {
           WHERE LOWER(sender_email) LIKE $1
           OR LOWER(sender_email) = $2
         `, [`%${email}%`, email]);
-        
+
         logger.info(`  ${email}: ${result.rowCount} emails marked as outbound`);
         totalOutbound += result.rowCount;
       }
-      
+
       logger.info(`Total outbound emails: ${totalOutbound}`);
-      
+
       // Analyze threads for responses
       const threadsResult = await client.query(`
         SELECT DISTINCT thread_id
         FROM emails
         WHERE thread_id IS NOT NULL
       `);
-      
+
       let threadsWithResponses = 0;
       let emailsMarkedWithResponse = 0;
-      
+
       for (const thread of threadsResult.rows) {
         // Get all emails in this thread
         const threadEmails = await client.query(`
@@ -591,13 +596,13 @@ class EmailService {
           WHERE thread_id = $1
           ORDER BY received_at ASC
         `, [thread.thread_id]);
-        
+
         const hasInbound = threadEmails.rows.some(e => e.direction === 'inbound');
         const hasOutbound = threadEmails.rows.some(e => e.direction === 'outbound');
-        
+
         if (hasInbound && hasOutbound) {
           threadsWithResponses++;
-          
+
           // Mark inbound emails as having responses
           const updateResult = await client.query(`
             UPDATE emails
@@ -605,14 +610,14 @@ class EmailService {
             WHERE thread_id = $1
             AND direction = 'inbound'
           `, [thread.thread_id]);
-          
+
           emailsMarkedWithResponse += updateResult.rowCount;
         }
       }
-      
+
       logger.info(`Found ${threadsWithResponses} threads with responses`);
       logger.info(`Marked ${emailsMarkedWithResponse} customer emails as having responses`);
-      
+
       // Update filtering status
       // Mark outbound emails as filtered
       await client.query(`
@@ -621,7 +626,7 @@ class EmailService {
             filtering_reason = 'Email from connected business account'
         WHERE direction = 'outbound'
       `);
-      
+
       // Mark inbound without responses as filtered
       await client.query(`
         UPDATE emails
@@ -630,7 +635,7 @@ class EmailService {
         WHERE direction = 'inbound'
         AND (has_response IS NULL OR has_response = false)
       `);
-      
+
       // Mark inbound with responses as qualified
       const qualifiedResult = await client.query(`
         UPDATE emails
@@ -638,11 +643,11 @@ class EmailService {
         WHERE direction = 'inbound'
         AND has_response = true
       `);
-      
+
       logger.info(`Marked ${qualifiedResult.rowCount} emails as qualified for FAQ generation`);
-      
+
       await client.query('COMMIT');
-      
+
       // Return statistics
       const finalStats = await client.query(`
         SELECT
@@ -653,9 +658,9 @@ class EmailService {
           COUNT(*) FILTER (WHERE filtering_status = 'qualified') as qualified_emails
         FROM emails
       `);
-      
+
       return finalStats.rows[0];
-      
+
     } catch (error) {
       await client.query('ROLLBACK');
       logger.error('Error fixing email direction:', error);
@@ -704,7 +709,7 @@ class EmailService {
     try {
       const encryptedAccessToken = encrypt(tokens.access_token);
       const encryptedRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : null;
-      
+
       const query = `
         UPDATE email_accounts
         SET
@@ -716,25 +721,25 @@ class EmailService {
         WHERE id = $4
         RETURNING id, email_address, provider, status
       `;
-      
+
       const result = await db.query(query, [
         encryptedAccessToken,
         encryptedRefreshToken,
         tokens.token_expires_at ? new Date(tokens.token_expires_at) : null,
         accountId
       ]);
-      
+
       if (result.rows.length === 0) {
         throw new Error(`Account ${accountId} not found`);
       }
-      
+
       logger.info(`Updated tokens for account ${accountId}`, {
         accountId,
         hasAccessToken: !!tokens.access_token,
         hasRefreshToken: !!tokens.refresh_token,
         expiresAt: tokens.token_expires_at
       });
-      
+
       return result.rows[0];
     } catch (error) {
       logger.error(`Error updating tokens for account ${accountId}:`, error);
@@ -749,9 +754,9 @@ class EmailService {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
-      
+
       logger.info(`Starting deletion of account ${accountId}`);
-      
+
       // First, delete all questions associated with emails from this account
       const deleteQuestionsQuery = `
         DELETE FROM questions
@@ -761,35 +766,35 @@ class EmailService {
       `;
       const questionsResult = await client.query(deleteQuestionsQuery, [accountId]);
       logger.info(`Deleted ${questionsResult.rowCount} questions for account ${accountId}`);
-      
+
       // Then, delete all emails associated with this account
       const deleteEmailsQuery = 'DELETE FROM emails WHERE account_id = $1';
       const emailsResult = await client.query(deleteEmailsQuery, [accountId]);
       logger.info(`Deleted ${emailsResult.rowCount} emails for account ${accountId}`);
-      
+
       // Finally, delete the account itself
       const deleteAccountQuery = 'DELETE FROM email_accounts WHERE id = $1 RETURNING email_address, provider';
       const accountResult = await client.query(deleteAccountQuery, [accountId]);
-      
+
       if (accountResult.rows.length === 0) {
         throw new Error(`Account ${accountId} not found`);
       }
-      
+
       const deletedAccount = accountResult.rows[0];
       logger.info(`Successfully deleted account ${accountId}`, {
         email: deletedAccount.email_address,
         provider: deletedAccount.provider
       });
-      
+
       await client.query('COMMIT');
-      
+
       return {
         success: true,
         message: `Account ${deletedAccount.email_address} and all associated data deleted successfully`,
         deletedEmails: emailsResult.rowCount,
         deletedQuestions: questionsResult.rowCount
       };
-      
+
     } catch (error) {
       await client.query('ROLLBACK');
       logger.error(`Error deleting account ${accountId}:`, error);
