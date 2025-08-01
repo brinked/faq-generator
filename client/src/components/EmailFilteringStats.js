@@ -16,8 +16,7 @@ const EmailFilteringStats = ({ connectedAccounts }) => {
     try {
       setLoading(true);
       const accountId = selectedAccount === 'all' ? null : selectedAccount;
-      const response = await fetch(`/api/emails/stats/filtering${accountId ? `?accountId=${accountId}` : ''}`);
-      const data = await response.json();
+      const data = await apiService.getEmailFilteringStats(accountId);
       
       if (data.success) {
         setStats(data.stats);

@@ -21,6 +21,45 @@ class ApiService {
     this.baseURL = API_BASE_URL;
   }
 
+  // Basic HTTP methods
+  async get(endpoint, options = {}) {
+    return this.request(endpoint, {
+      method: 'GET',
+      ...options,
+    });
+  }
+
+  async post(endpoint, data = null, options = {}) {
+    return this.request(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
+  async put(endpoint, data = null, options = {}) {
+    return this.request(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
+  async patch(endpoint, data = null, options = {}) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
+  async delete(endpoint, options = {}) {
+    return this.request(endpoint, {
+      method: 'DELETE',
+      ...options,
+    });
+  }
+
   // Helper method for making API requests
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
@@ -49,75 +88,63 @@ class ApiService {
 
   // Account management
   async getConnectedAccounts() {
-    const response = await this.request('/api/accounts');
+    const response = await this.get('/api/accounts');
     return response.accounts || [];
   }
 
   async connectGmailAccount() {
-    return this.request('/api/auth/gmail');
+    return this.get('/api/auth/gmail');
   }
 
   async connectOutlookAccount() {
-    return this.request('/api/auth/outlook');
+    return this.get('/api/auth/outlook');
   }
   
   async getGmailAuthUrl() {
     console.log('Requesting Gmail auth URL');
-    const response = await this.request('/api/auth/gmail/url');
+    const response = await this.get('/api/auth/gmail/url');
     console.log('Gmail auth URL response:', response);
     return response.authUrl;
   }
 
   async getOutlookAuthUrl() {
     console.log('Requesting Outlook auth URL');
-    const response = await this.request('/api/auth/outlook/url');
+    const response = await this.get('/api/auth/outlook/url');
     console.log('Outlook auth URL response:', response);
     return response.authUrl;
   }
 
   async handleGmailCallback(code) {
-    return this.request('/api/auth/gmail/callback', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    });
+    return this.post('/api/auth/gmail/callback', { code });
   }
 
   async handleOutlookCallback(code) {
-    return this.request('/api/auth/outlook/callback', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    });
+    return this.post('/api/auth/outlook/callback', { code });
   }
 
   async disconnectAccount(accountId) {
-    return this.request(`/api/accounts/${accountId}`, {
-      method: 'DELETE',
-    });
+    return this.delete(`/api/accounts/${accountId}`);
   }
 
   // Email processing
   async startEmailProcessing(accountId) {
-    return this.request(`/api/accounts/${accountId}/sync`, {
-      method: 'POST',
-    });
+    return this.post(`/api/accounts/${accountId}/sync`);
   }
 
   async syncAllEmails() {
-    return this.request('/api/dashboard/sync-all', {
-      method: 'POST',
-    });
+    return this.post('/api/dashboard/sync-all');
   }
 
   async getEmailStats() {
-    return this.request('/api/emails/stats');
+    return this.get('/api/emails/stats');
   }
 
   async getProcessingStatus() {
-    return this.request('/api/dashboard/processing-status');
+    return this.get('/api/dashboard/processing-status');
   }
 
   async getSyncStatus(accountId) {
-    return this.request(`/api/accounts/${accountId}/sync-status`);
+    return this.get(`/api/accounts/${accountId}/sync-status`);
   }
 
   // FAQ management
@@ -137,56 +164,47 @@ class ApiService {
     const queryString = queryParams.toString();
     const endpoint = `/api/faqs?${queryString}`;
     
-    const response = await this.request(endpoint);
+    const response = await this.get(endpoint);
     // The API returns { success: true, faqs: [...], pagination: {...} }
     // But the component expects just the array
     return response.faqs || [];
   }
 
   async getFAQById(faqId) {
-    return this.request(`/api/faqs/${faqId}`);
+    return this.get(`/api/faqs/${faqId}`);
   }
 
   async updateFAQ(faqId, updates) {
-    return this.request(`/api/faqs/${faqId}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    });
+    return this.put(`/api/faqs/${faqId}`, updates);
   }
 
   async deleteFAQ(faqId) {
-    return this.request(`/api/faqs/${faqId}`, {
-      method: 'DELETE',
-    });
+    return this.delete(`/api/faqs/${faqId}`);
   }
 
   async regenerateFAQs() {
-    return this.request('/api/faqs/regenerate', {
-      method: 'POST',
-    });
+    return this.post('/api/faqs/regenerate');
   }
 
   async publishAllFAQs() {
-    return this.request('/api/faqs/publish-all', {
-      method: 'POST',
-    });
+    return this.post('/api/faqs/publish-all');
   }
 
   async getFAQCategories() {
-    return this.request('/api/faqs/categories');
+    return this.get('/api/faqs/categories');
   }
 
   async getFAQSources(faqId) {
-    return this.request(`/api/faq-sources/${faqId}/sources`);
+    return this.get(`/api/faq-sources/${faqId}/sources`);
   }
 
   // Dashboard and analytics
   async getDashboardStats() {
-    return this.request('/api/dashboard/stats');
+    return this.get('/api/dashboard/stats');
   }
 
   async getEmailAnalytics(timeRange = '30d') {
-    return this.request(`/api/dashboard/analytics?timeRange=${timeRange}`);
+    return this.get(`/api/dashboard/analytics?timeRange=${timeRange}`);
   }
 
   // Export functionality
@@ -244,7 +262,7 @@ class ApiService {
       if (value) queryParams.append(key, value);
     });
 
-    return this.request(`/api/emails/search?${queryParams.toString()}`);
+    return this.get(`/api/emails/search?${queryParams.toString()}`);
   }
 
   async searchFAQs(query, filters = {}) {
@@ -255,22 +273,47 @@ class ApiService {
       if (value) queryParams.append(key, value);
     });
 
-    return this.request(`/api/faqs/search?${queryParams.toString()}`);
+    return this.get(`/api/faqs/search?${queryParams.toString()}`);
   }
 
   // Health check
   async healthCheck() {
-    return this.request('/api/health');
+    return this.get('/api/health');
+  }
+
+  // FAQ Processing
+  async getFAQStatus() {
+    return this.get('/api/sync/faq-status');
+  }
+
+  async processFAQs(limit = 100) {
+    return this.post('/api/sync/process-faqs', { limit });
+  }
+
+  async generateFAQs(options = {}) {
+    const defaultOptions = {
+      minQuestionCount: 1,
+      maxFAQs: 20,
+      forceRegenerate: false,
+      autoFix: true
+    };
+    return this.post('/api/sync/generate-faqs', { ...defaultOptions, ...options });
+  }
+
+  // Email Filtering Stats
+  async getEmailFilteringStats(accountId = null) {
+    const endpoint = accountId ? `/api/emails/stats/filtering?accountId=${accountId}` : '/api/emails/stats/filtering';
+    return this.get(endpoint);
   }
 
   // OAuth URL generation
   async getGmailAuthUrl() {
-    const response = await this.request('/api/auth/gmail/url');
+    const response = await this.get('/api/auth/gmail/url');
     return response.authUrl;
   }
 
   async getOutlookAuthUrl() {
-    const response = await this.request('/api/auth/outlook/url');
+    const response = await this.get('/api/auth/outlook/url');
     return response.authUrl;
   }
 

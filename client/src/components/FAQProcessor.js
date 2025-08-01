@@ -37,8 +37,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
 
   const loadStatus = async () => {
     try {
-      const response = await fetch('/api/sync/faq-status');
-      const data = await response.json();
+      const data = await apiService.getFAQStatus();
       if (data.success) {
         setStatus(data.status);
       }
@@ -126,15 +125,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       setLogs([]);
       addLog(`🚀 Starting FAQ processing for up to ${limit} emails...`);
 
-      const response = await fetch('/api/sync/process-faqs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ limit }),
-      });
-
-      const data = await response.json();
+      const data = await apiService.processFAQs(limit);
       
       if (data.success) {
         addLog(`✅ Processing started for ${data.emailCount} emails`);
@@ -155,20 +146,12 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
       setProgress(null);
       addLog(`🧠 Starting FAQ generation with auto-fix...`);
 
-      const response = await fetch('/api/sync/generate-faqs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          minQuestionCount: 1,
-          maxFAQs: 20,
-          forceRegenerate: false,
-          autoFix: true
-        }),
+      const data = await apiService.generateFAQs({
+        minQuestionCount: 1,
+        maxFAQs: 20,
+        forceRegenerate: false,
+        autoFix: true
       });
-
-      const data = await response.json();
       
       if (data.success) {
         addLog(`✅ FAQ generation started with auto-fix enabled`);
