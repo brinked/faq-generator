@@ -17,6 +17,8 @@
     "test:watch": "mocha tests/**/*.test.js --timeout 10000 --recursive --watch",
     "test:coverage": "nyc mocha tests/**/*.test.js --timeout 10000 --recursive",
     "migrate": "node scripts/migrate.js",
+    "migrate:auth": "node scripts/run-auth-migration.js",
+    "init:admin": "node scripts/init-admin.js",
     "seed": "node scripts/seed.js",
     "sync-emails": "node scripts/sync-emails.js",
     "generate-faqs": "node scripts/generate-faqs.js",

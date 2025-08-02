@@ -12,6 +12,8 @@ const logger = require('./src/utils/logger');
 const db = require('./src/config/database');
 const redisClient = require('./src/config/redis');
 const authRoutes = require('./src/routes/auth');
+const publicFaqRoutes = require('./src/routes/public-faqs');
+const adminFaqRoutes = require('./src/routes/admin-faqs');
 const emailRoutes = require('./src/routes/emails');
 const faqRoutes = require('./src/routes/faqs');
 const faqSourcesRoutes = require('./src/routes/faq-sources');
@@ -116,7 +118,15 @@ app.use((req, res, next) => {
 });
 
 // API Routes - IMPORTANT: These must be defined before static file serving
+
+// Public routes (no authentication required)
+app.use('/api/public', publicFaqRoutes);
+
+// Admin routes (authentication required)
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminFaqRoutes);
+
+// Existing routes (will be moved to admin area)
 app.use('/api/emails', emailRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/faq-sources', faqSourcesRoutes);

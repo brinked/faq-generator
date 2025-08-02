@@ -19,6 +19,7 @@ const API_BASE_URL = getApiBaseUrl();
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
+    this.token = localStorage.getItem('adminToken');
   }
 
   async get(endpoint, options = {}) {
@@ -69,6 +70,11 @@ class ApiService {
       },
       ...options,
     };
+
+    // Add authorization header if token exists
+    if (this.token) {
+      config.headers['Authorization'] = `Bearer ${this.token}`;
+    }
 
     try {
       const response = await fetch(url, config);
@@ -324,6 +330,58 @@ class ApiService {
   async getEmailFilteringStats(accountId = null) {
     const endpoint = accountId ? `/api/emails/stats/filtering?accountId=${accountId}` : '/api/emails/stats/filtering';
     return this.get(endpoint);
+  }
+
+  // Authentication methods
+  async login(username, password) {
+    const response = await this.post('/api/auth/login', { username, password });
+    
+    // Store token if login successful
+    if (response.success && response.token) {
+      this.token = response.token;
+      localStorage.setItem('adminToken', response.token);
+    }
+    
+    return response;
+  }
+
+  async logout() {
+    const response = await this.post('/api/auth/logout');
+    
+    // Clear token on logout
+    this.token = null;
+    localStorage.removeItem('adminToken');
+    
+    return response;
+  }
+
+  async getAuthStatus() {
+    return this.get('/api/auth/status');
+  }
+
+  isAuthenticated() {
+    return !!this.token;
+  }
+
+  getToken() {
+    return this.token;
+  }
+
+  setToken(token) {
+    this.token = token;
+    if (token) {
+      localStorage.setItem('adminToken', token);
+    } else {
+      localStorage.removeItem('adminToken');
+    }
+  }
+
+  async getCurrentUser() {
+    return this.get('/api/auth/me');
+  }
+
+  async changePassword(currentPassword, newPassword) {
+    return this.post('/api/auth/change-password', { currentPassword, newPassword });
   }
 
   // OAuth URL generation
