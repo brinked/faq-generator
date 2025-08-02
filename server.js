@@ -12,6 +12,7 @@ const logger = require('./src/utils/logger');
 const db = require('./src/config/database');
 const redisClient = require('./src/config/redis');
 const authRoutes = require('./src/routes/auth');
+const oauthRoutes = require('./src/routes/oauth');
 const publicFaqRoutes = require('./src/routes/public-faqs');
 const adminFaqRoutes = require('./src/routes/admin-faqs');
 const emailRoutes = require('./src/routes/emails');
@@ -124,6 +125,7 @@ app.use('/api/public', publicFaqRoutes);
 
 // Admin routes (authentication required)
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', oauthRoutes);
 app.use('/api/admin', adminFaqRoutes);
 
 // Existing routes (will be moved to admin area)

@@ -54,14 +54,14 @@ const PublicLanding = () => {
               Find Answers
               <span className="text-blue-600"> Instantly</span>
             </motion.h1>
-            
+
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto"
             >
-              Get instant answers to your questions with our AI-powered knowledge base. 
+              Get instant answers to your questions with our AI-powered knowledge base.
               Search through comprehensive FAQs and find solutions quickly.
             </motion.p>
 
@@ -127,7 +127,7 @@ const PublicLanding = () => {
               Why Choose Our FAQ System?
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Powered by AI and designed for clarity, our knowledge base provides 
+              Powered by AI and designed for clarity, our knowledge base provides
               comprehensive answers to your most common questions.
             </p>
           </div>
@@ -211,7 +211,7 @@ const PublicLanding = () => {
             </div>
             <div className="mt-8 pt-8 border-t border-gray-800">
               <p className="text-gray-400 text-sm">
-                © 2024 FAQ Generator. All rights reserved.
+                © {new Date().getFullYear()} FAQ Generator. All rights reserved.
               </p>
             </div>
           </div>
@@ -221,4 +221,4 @@ const PublicLanding = () => {
   );
 };
 
-export default PublicLanding; 
+export default PublicLanding;

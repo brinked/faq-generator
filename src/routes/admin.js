@@ -1,7 +1,10 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const router = express.Router();
 const logger = require('../utils/logger');
 const db = require('../config/database');
+const { requireAuth } = require('../middleware/auth');
+const bcrypt = require('bcrypt');
 
 /**
  * Admin route to reset account data for testing
@@ -406,6 +409,73 @@ router.get('/test-filtering/:accountId', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to test filtering logic'
+    });
+  }
+});
+
+/**
+ * Change admin password
+ * PUT /api/admin/change-password
+ */
+router.put('/change-password', requireAuth, [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters long')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    // Get current user from database
+    const userResult = await db.query('SELECT password_hash FROM admin_users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Hash new password
+    const saltRounds = 10;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password in database
+    await db.query(
+      'UPDATE admin_users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [hashedNewPassword, userId]
+    );
+
+    logger.info(`Admin password changed: ${req.user.username}`);
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    logger.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to change password'
     });
   }
 });

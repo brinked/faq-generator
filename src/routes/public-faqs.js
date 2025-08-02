@@ -5,100 +5,69 @@ const logger = require('../utils/logger');
 const router = express.Router();
 
 /**
- * Get public FAQs with search and filtering
+ * Get public FAQs with search and filtering (from faq_groups table)
  * GET /api/public/faqs
  */
 router.get('/faqs', async (req, res) => {
   try {
-    const {
-      search = '',
-      category = '',
-      page = 1,
-      limit = 20,
-      sort = 'sort_order'
-    } = req.query;
-
+    const { page = 1, limit = 20, search = '', sort = 'recent', category = '' } = req.query;
     const offset = (page - 1) * limit;
-    
-    // Build query conditions
-    let whereConditions = ['is_published = true'];
+
+    let whereClause = 'fg.is_published = true';
     let queryParams = [];
     let paramIndex = 1;
 
-    // Add search condition
-    if (search.trim()) {
-      whereConditions.push(`(
-        to_tsvector('english', title || ' ' || question || ' ' || answer) @@ plainto_tsquery('english', $${paramIndex}) OR
-        title ILIKE $${paramIndex + 1} OR
-        question ILIKE $${paramIndex + 1} OR
-        answer ILIKE $${paramIndex + 1}
-      )`);
-      queryParams.push(search, `%${search}%`);
-      paramIndex += 2;
+    if (search) {
+      whereClause += ` AND (fg.title ILIKE $${paramIndex} OR fg.representative_question ILIKE $${paramIndex} OR fg.consolidated_answer ILIKE $${paramIndex})`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
     }
 
-    // Add category filter
-    if (category.trim()) {
-      whereConditions.push(`category = $${paramIndex}`);
+    if (category) {
+      whereClause += ` AND fg.category = $${paramIndex}`;
       queryParams.push(category);
       paramIndex++;
     }
 
-    const whereClause = whereConditions.join(' AND ');
-
-    // Get total count
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM public_faqs
-      WHERE ${whereClause}
-    `;
-    
-    const countResult = await db.query(countQuery, queryParams);
-    const total = parseInt(countResult.rows[0].total);
-
-    // Get FAQs with pagination
     const faqsQuery = `
-      SELECT 
-        id, title, question, answer, category, tags, 
-        view_count, helpful_count, not_helpful_count,
-        sort_order, created_at, updated_at
-      FROM public_faqs
+      SELECT
+        fg.id,
+        fg.title,
+        fg.representative_question as question,
+        fg.consolidated_answer as answer,
+        fg.category,
+        fg.tags,
+        fg.view_count,
+        fg.helpful_count,
+        fg.not_helpful_count,
+        fg.created_at,
+        fg.updated_at
+      FROM faq_groups fg
       WHERE ${whereClause}
-      ORDER BY ${sort === 'recent' ? 'created_at DESC' : 'sort_order ASC, created_at DESC'}
+      ORDER BY ${sort === 'popular' ? 'fg.view_count DESC, fg.helpful_count DESC' : 'fg.sort_order ASC, fg.created_at DESC'}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    
-    queryParams.push(limit, offset);
-    const faqsResult = await db.query(faqsQuery, queryParams);
+    const faqsResult = await db.query(faqsQuery, [...queryParams, limit, offset]);
 
-    // Get unique categories for filtering
-    const categoriesQuery = `
-      SELECT DISTINCT category
-      FROM public_faqs
-      WHERE is_published = true AND category IS NOT NULL
-      ORDER BY category
-    `;
-    const categoriesResult = await db.query(categoriesQuery);
+    const totalResult = await db.query(`SELECT COUNT(*) FROM faq_groups fg WHERE ${whereClause}`, queryParams);
+    const total = parseInt(totalResult.rows[0].count, 10);
 
     res.json({
       success: true,
       faqs: faqsResult.rows,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
         total,
         pages: Math.ceil(total / limit)
-      },
-      categories: categoriesResult.rows.map(row => row.category),
-      search,
-      category
+      }
     });
 
   } catch (error) {
     logger.error('Public FAQs route error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to load FAQs'
+      message: 'Failed to fetch public FAQs'
     });
   }
 });
@@ -111,29 +80,38 @@ router.get('/faqs/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const query = `
-      SELECT 
-        id, title, question, answer, category, tags,
-        view_count, helpful_count, not_helpful_count,
-        sort_order, created_at, updated_at
-      FROM public_faqs
-      WHERE id = $1 AND is_published = true
+    const updateViewCountQuery = `
+      UPDATE faq_groups
+      SET view_count = view_count + 1,
+          updated_at = NOW()
+      WHERE id = $1 AND is_published = true;
     `;
+    await db.query(updateViewCountQuery, [id]);
 
-    const result = await db.query(query, [id]);
+    const faqQuery = `
+      SELECT 
+        id, 
+        title,
+        representative_question as question,
+        consolidated_answer as answer,
+        category, 
+        tags,
+        view_count,
+        helpful_count,
+        not_helpful_count,
+        created_at, 
+        updated_at
+      FROM faq_groups
+      WHERE id = $1 AND is_published = true;
+    `;
+    const result = await db.query(faqQuery, [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'FAQ not found'
+        message: 'FAQ not found or not published.'
       });
     }
-
-    // Increment view count
-    await db.query(
-      'UPDATE public_faqs SET view_count = view_count + 1 WHERE id = $1',
-      [id]
-    );
 
     res.json({
       success: true,
@@ -141,10 +119,10 @@ router.get('/faqs/:id', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Get public FAQ route error:', error);
+    logger.error('Get public FAQ by ID error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to load FAQ'
+      message: 'Failed to fetch FAQ.'
     });
   }
 });
@@ -161,44 +139,40 @@ router.post('/faqs/:id/feedback', async (req, res) => {
     if (typeof helpful !== 'boolean') {
       return res.status(400).json({
         success: false,
-        message: 'Helpful field is required and must be boolean'
+        message: 'Helpful field is required and must be a boolean.'
       });
     }
 
-    // Check if FAQ exists and is published
-    const checkQuery = `
-      SELECT id FROM public_faqs 
-      WHERE id = $1 AND is_published = true
-    `;
-    const checkResult = await db.query(checkQuery, [id]);
+    const columnToUpdate = helpful ? 'helpful_count' : 'not_helpful_count';
 
-    if (checkResult.rows.length === 0) {
+    const updateQuery = `
+      UPDATE faq_groups
+      SET ${columnToUpdate} = ${columnToUpdate} + 1,
+          updated_at = NOW()
+      WHERE id = $1 AND is_published = true
+      RETURNING helpful_count, not_helpful_count;
+    `;
+
+    const result = await db.query(updateQuery, [id]);
+
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'FAQ not found'
+        message: 'FAQ not found or not published.'
       });
     }
-
-    // Update feedback count
-    const updateField = helpful ? 'helpful_count' : 'not_helpful_count';
-    const updateQuery = `
-      UPDATE public_faqs 
-      SET ${updateField} = ${updateField} + 1 
-      WHERE id = $1
-    `;
-    
-    await db.query(updateQuery, [id]);
 
     res.json({
       success: true,
-      message: 'Feedback recorded'
+      message: 'Feedback recorded successfully.',
+      feedback: result.rows[0]
     });
 
   } catch (error) {
-    logger.error('FAQ feedback route error:', error);
+    logger.error('Error recording FAQ feedback:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to record feedback'
+      message: 'Failed to record feedback.'
     });
   }
 });

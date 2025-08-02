@@ -33,11 +33,13 @@ const PublicFAQDisplay = () => {
       const data = await apiService.get(`/api/public/faqs?${params}`);
 
       if (data.success) {
-        setFaqs(data.faqs);
-        setCategories(data.categories);
+        setFaqs(data.faqs || []);
+        setCategories(data.categories || []);
         setPagination(data.pagination);
       } else {
         toast.error('Failed to load FAQs');
+        setFaqs([]);
+        setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching FAQs:', error);

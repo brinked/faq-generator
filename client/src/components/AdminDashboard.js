@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 import { toast } from 'react-toastify';
@@ -10,6 +10,8 @@ import StepIndicator from './StepIndicator';
 import EmailConnectionWizard from './EmailConnectionWizard';
 import ProcessingStatus from './ProcessingStatus';
 import FAQDisplay from './FAQDisplay';
+import AdminFAQManager from './AdminFAQManager';
+import SettingsModal from './SettingsModal';
 import LoadingSpinner from './LoadingSpinner';
 import FAQProcessor from './FAQProcessor';
 
@@ -19,7 +21,8 @@ import { apiService } from '../services/apiService';
 const STEPS = [
   { id: 1, title: 'Connect Email', description: 'Connect your Gmail or Outlook account' },
   { id: 2, title: 'Process Emails', description: 'AI analyzes your emails for questions' },
-  { id: 3, title: 'Generate FAQs', description: 'View your automatically generated FAQs' }
+  { id: 3, title: 'Generate FAQs', description: 'View your automatically generated FAQs' },
+  { id: 4, title: 'Manage FAQs', description: 'Edit, sort, and manage your FAQs' }
 ];
 
 const AdminDashboard = () => {
@@ -31,7 +34,9 @@ const AdminDashboard = () => {
   const [socket, setSocket] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Check authentication
   useEffect(() => {
@@ -62,6 +67,53 @@ const AdminDashboard = () => {
 
     checkAuth();
   }, [navigate]);
+
+  // Handle OAuth callback parameters and popup messages
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Handle direct URL parameters (fallback)
+    const urlParams = new URLSearchParams(location.search);
+    const success = urlParams.get('success');
+    const error = urlParams.get('error');
+    const provider = urlParams.get('provider');
+    const email = urlParams.get('email');
+    const message = urlParams.get('message');
+
+    if (success === 'true' && provider && email) {
+      toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} account connected successfully! (${email})`);
+      // Clear the URL parameters
+      navigate('/admin/dashboard', { replace: true });
+      // Refresh accounts to show the new connection
+      loadConnectedAccounts();
+    } else if (error) {
+      const errorMessage = message || 'OAuth connection failed';
+      toast.error(`OAuth Error: ${errorMessage}`);
+      // Clear the URL parameters
+      navigate('/admin/dashboard', { replace: true });
+    }
+
+    // Listen for messages from OAuth popup
+    const handleOAuthMessage = (event) => {
+      if (event.data && event.data.type === 'oauth_complete') {
+        const { success, provider, email, error } = event.data;
+
+        if (success && provider) {
+          toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} account connected successfully!${email ? ` (${email})` : ''}`);
+          // Refresh accounts to show the new connection
+          loadConnectedAccounts();
+        } else if (error) {
+          toast.error(`OAuth Error: ${error}`);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+
+    return () => {
+      window.removeEventListener('message', handleOAuthMessage);
+    };
+  }, [isAuthenticated, location.search, navigate]);
 
   // Initialize app after authentication
   useEffect(() => {
@@ -236,7 +288,11 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <Header user={user} onLogout={handleLogout} />
+      <Header
+        user={user}
+        onLogout={handleLogout}
+        onSettings={() => setShowSettings(true)}
+      />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Step Indicator */}
@@ -337,6 +393,20 @@ const AdminDashboard = () => {
               />
             </motion.div>
           )}
+
+          {currentStep === 4 && (
+            <motion.div
+              key="step4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <AdminFAQManager
+                onBack={() => setCurrentStep(3)}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
 
         {/* Navigation */}
@@ -373,18 +443,29 @@ const AdminDashboard = () => {
 
             <button
               onClick={() => {
-                const nextStep = Math.min(3, currentStep + 1);
-                setCurrentStep(nextStep);
+                if (currentStep === 4) {
+                  // Complete button: Show success message and allow restart
+                  toast.success('FAQ management workflow completed successfully!');
+                  setCurrentStep(1); // Go back to step 1 to start over
+                } else {
+                  const nextStep = Math.min(4, currentStep + 1);
+                  setCurrentStep(nextStep);
+                }
               }}
-              disabled={currentStep === 3 || (currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0)}
+              disabled={(currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0) || (currentStep === 4)}
               className="w-full sm:w-auto group relative overflow-hidden bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl btn-hover-lift focus-ring"
             >
               <span>
                 {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
                  currentStep === 2 && faqs.length > 0 ? 'View Generated FAQs' :
-                 currentStep === 3 ? 'Complete' : 'Next Step'}
+                 currentStep === 3 ? 'Manage FAQs' :
+                 currentStep === 4 ? 'Complete' : 'Next Step'}
               </span>
-              {currentStep < 3 && (
+              {currentStep === 4 ? (
+                <svg className="w-5 h-5 transition-transform group-hover:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : currentStep < 4 && (
                 <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
@@ -393,6 +474,13 @@ const AdminDashboard = () => {
           </div>
         </div>
       </main>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        user={user}
+      />
     </div>
   );
 };

@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 const router = express.Router();
 
 /**
- * Get all public FAQs for admin management
+ * Get all FAQs for admin management (from faq_groups table)
  * GET /api/admin/faqs
  */
 router.get('/faqs', requireAuth, async (req, res) => {
@@ -30,10 +30,10 @@ router.get('/faqs', requireAuth, async (req, res) => {
     // Add search condition
     if (search.trim()) {
       whereConditions.push(`(
-        to_tsvector('english', title || ' ' || question || ' ' || answer) @@ plainto_tsquery('english', $${paramIndex}) OR
-        title ILIKE $${paramIndex + 1} OR
-        question ILIKE $${paramIndex + 1} OR
-        answer ILIKE $${paramIndex + 1}
+        to_tsvector('english', COALESCE(title, '') || ' ' || representative_question || ' ' || consolidated_answer) @@ plainto_tsquery('english', $${paramIndex}) OR
+        COALESCE(title, '') ILIKE $${paramIndex + 1} OR
+        representative_question ILIKE $${paramIndex + 1} OR
+        consolidated_answer ILIKE $${paramIndex + 1}
       )`);
       queryParams.push(search, `%${search}%`);
       paramIndex += 2;
@@ -55,23 +55,36 @@ router.get('/faqs', requireAuth, async (req, res) => {
 
     const whereClause = whereConditions.join(' AND ');
 
-    // Get total count
+    // Get total count from faq_groups
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM public_faqs
+      FROM faq_groups
       WHERE ${whereClause}
     `;
     
     const countResult = await db.query(countQuery, queryParams);
     const total = parseInt(countResult.rows[0].total);
 
-    // Get FAQs with pagination
+    // Get FAQs with pagination from faq_groups
     const faqsQuery = `
       SELECT 
-        id, title, question, answer, category, tags, 
-        is_published, view_count, helpful_count, not_helpful_count,
-        sort_order, created_at, updated_at
-      FROM public_faqs
+        id, 
+        title,
+        representative_question as question,
+        consolidated_answer as answer,
+        category, 
+        tags, 
+        is_published, 
+        0 as view_count,
+        0 as helpful_count,
+        0 as not_helpful_count,
+        COALESCE(sort_order, 0) as sort_order,
+        question_count,
+        frequency_score,
+        avg_confidence,
+        created_at, 
+        updated_at
+      FROM faq_groups
       WHERE ${whereClause}
       ORDER BY sort_order ASC, created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -80,10 +93,10 @@ router.get('/faqs', requireAuth, async (req, res) => {
     queryParams.push(limit, offset);
     const faqsResult = await db.query(faqsQuery, queryParams);
 
-    // Get unique categories
+    // Get unique categories from faq_groups
     const categoriesQuery = `
       SELECT DISTINCT category
-      FROM public_faqs
+      FROM faq_groups
       WHERE category IS NOT NULL
       ORDER BY category
     `;
@@ -98,33 +111,35 @@ router.get('/faqs', requireAuth, async (req, res) => {
         total,
         pages: Math.ceil(total / limit)
       },
-      categories: categoriesResult.rows.map(row => row.category)
+      categories: categoriesResult.rows.map(row => row.category),
+      search,
+      category
     });
 
   } catch (error) {
     logger.error('Admin FAQs route error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to load FAQs'
+      message: 'Failed to fetch FAQs'
     });
   }
 });
 
 /**
- * Create new public FAQ
+ * Create a new FAQ
  * POST /api/admin/faqs
  */
 router.post('/faqs', requireAuth, [
-  body('title').notEmpty().withMessage('Title is required'),
   body('question').notEmpty().withMessage('Question is required'),
   body('answer').notEmpty().withMessage('Answer is required'),
+  body('title').optional(),
   body('category').optional(),
-  body('tags').optional().isArray(),
-  body('is_published').optional().isBoolean(),
-  body('sort_order').optional().isInt({ min: 0 })
+  body('tags').optional().custom((value) => {
+    if (value === null || value === undefined) return true;
+    return Array.isArray(value);
+  })
 ], async (req, res) => {
   try {
-    // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -134,38 +149,23 @@ router.post('/faqs', requireAuth, [
       });
     }
 
-    const {
-      title,
-      question,
-      answer,
-      category = null,
-      tags = [],
-      is_published = false,
-      sort_order = 0
-    } = req.body;
+    const { question, answer, title, category, tags } = req.body;
 
-    const query = `
-      INSERT INTO public_faqs (
-        title, question, answer, category, tags, 
-        is_published, sort_order
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    // Insert into faq_groups table
+    const result = await db.query(`
+      INSERT INTO faq_groups (title, representative_question, consolidated_answer, category, tags, is_published, sort_order)
+      VALUES ($1, $2, $3, $4, $5, false, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM faq_groups))
       RETURNING *
-    `;
+    `, [title || question, question, answer, category, tags || []]);
 
-    const result = await db.query(query, [
-      title, question, answer, category, tags, is_published, sort_order
-    ]);
-
-    logger.info(`Admin created FAQ: ${title}`);
-
-    res.status(201).json({
+    res.json({
       success: true,
       faq: result.rows[0],
       message: 'FAQ created successfully'
     });
 
   } catch (error) {
-    logger.error('Create FAQ route error:', error);
+    logger.error('Create FAQ error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create FAQ'
@@ -174,20 +174,68 @@ router.post('/faqs', requireAuth, [
 });
 
 /**
- * Update public FAQ
+ * Reorder FAQs (must be before the parameterized route)
+ * PUT /api/admin/faqs/reorder
+ */
+router.put('/faqs/reorder', requireAuth, [
+  body('faqs').isArray().withMessage('FAQs array is required')
+], async (req, res) => {
+  try {
+    console.log('🔧 Reorder endpoint called with:', req.body);
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { faqs } = req.body;
+
+    // Update sort_order for each FAQ in faq_groups
+    for (let i = 0; i < faqs.length; i++) {
+      const faq = faqs[i];
+      console.log(`Updating FAQ ${faq.id} to sort_order ${faq.sort_order}`);
+      
+      await db.query(
+        'UPDATE faq_groups SET sort_order = $1 WHERE id = $2',
+        [faq.sort_order, faq.id]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'FAQ order updated successfully'
+    });
+
+  } catch (error) {
+    logger.error('Reorder FAQs error:', error);
+    console.error('Reorder error details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reorder FAQs'
+    });
+  }
+});
+
+/**
+ * Update an existing FAQ
  * PUT /api/admin/faqs/:id
  */
 router.put('/faqs/:id', requireAuth, [
-  body('title').optional().notEmpty().withMessage('Title cannot be empty'),
-  body('question').optional().notEmpty().withMessage('Question cannot be empty'),
-  body('answer').optional().notEmpty().withMessage('Answer cannot be empty'),
+  body('question').optional(),
+  body('answer').optional(),
+  body('title').optional(),
   body('category').optional(),
-  body('tags').optional().isArray(),
-  body('is_published').optional().isBoolean(),
-  body('sort_order').optional().isInt({ min: 0 })
+  body('tags').optional().custom((value) => {
+    if (value === null || value === undefined) return true;
+    return Array.isArray(value);
+  }),
+  body('is_published').optional().isBoolean()
 ], async (req, res) => {
   try {
-    // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -198,51 +246,59 @@ router.put('/faqs/:id', requireAuth, [
     }
 
     const { id } = req.params;
-    const updateFields = req.body;
+    const { question, answer, title, category, tags, is_published } = req.body;
 
-    // Check if FAQ exists
-    const checkQuery = 'SELECT id FROM public_faqs WHERE id = $1';
-    const checkResult = await db.query(checkQuery, [id]);
+    // Check if FAQ exists in faq_groups
+    let result = await db.query('SELECT * FROM faq_groups WHERE id = $1', [id]);
+    
+    if (result.rows.length > 0) {
+      // Update faq_groups
+      const updateFields = [];
+      const values = [];
+      let paramIndex = 1;
 
-    if (checkResult.rows.length === 0) {
+      if (question !== undefined) {
+        updateFields.push(`representative_question = $${paramIndex++}`);
+        values.push(question);
+      }
+      if (answer !== undefined) {
+        updateFields.push(`consolidated_answer = $${paramIndex++}`);
+        values.push(answer);
+      }
+      if (title !== undefined) {
+        updateFields.push(`title = $${paramIndex++}`);
+        values.push(title);
+      }
+      if (category !== undefined) {
+        updateFields.push(`category = $${paramIndex++}`);
+        values.push(category);
+      }
+      if (tags !== undefined) {
+        updateFields.push(`tags = $${paramIndex++}`);
+        values.push(tags);
+      }
+      if (is_published !== undefined) {
+        updateFields.push(`is_published = $${paramIndex++}`);
+        values.push(is_published);
+      }
+
+      updateFields.push(`updated_at = NOW()`);
+      values.push(id);
+
+      const updateQuery = `
+        UPDATE faq_groups 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING *
+      `;
+
+      result = await db.query(updateQuery, values);
+    } else {
       return res.status(404).json({
         success: false,
         message: 'FAQ not found'
       });
     }
-
-    // Build update query dynamically
-    const allowedFields = ['title', 'question', 'answer', 'category', 'tags', 'is_published', 'sort_order'];
-    const updates = [];
-    const values = [];
-    let paramIndex = 1;
-
-    for (const [field, value] of Object.entries(updateFields)) {
-      if (allowedFields.includes(field) && value !== undefined) {
-        updates.push(`${field} = $${paramIndex}`);
-        values.push(value);
-        paramIndex++;
-      }
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No valid fields to update'
-      });
-    }
-
-    values.push(id);
-    const updateQuery = `
-      UPDATE public_faqs 
-      SET ${updates.join(', ')}, updated_at = NOW()
-      WHERE id = $${paramIndex}
-      RETURNING *
-    `;
-
-    const result = await db.query(updateQuery, values);
-
-    logger.info(`Admin updated FAQ: ${result.rows[0].title}`);
 
     res.json({
       success: true,
@@ -251,7 +307,7 @@ router.put('/faqs/:id', requireAuth, [
     });
 
   } catch (error) {
-    logger.error('Update FAQ route error:', error);
+    logger.error('Update FAQ error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update FAQ'
@@ -260,30 +316,22 @@ router.put('/faqs/:id', requireAuth, [
 });
 
 /**
- * Delete public FAQ
+ * Delete an FAQ
  * DELETE /api/admin/faqs/:id
  */
 router.delete('/faqs/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if FAQ exists
-    const checkQuery = 'SELECT title FROM public_faqs WHERE id = $1';
-    const checkResult = await db.query(checkQuery, [id]);
-
-    if (checkResult.rows.length === 0) {
+    // Delete from faq_groups
+    let result = await db.query('DELETE FROM faq_groups WHERE id = $1 RETURNING *', [id]);
+    
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'FAQ not found'
       });
     }
-
-    const title = checkResult.rows[0].title;
-
-    // Delete FAQ
-    await db.query('DELETE FROM public_faqs WHERE id = $1', [id]);
-
-    logger.info(`Admin deleted FAQ: ${title}`);
 
     res.json({
       success: true,
@@ -291,127 +339,10 @@ router.delete('/faqs/:id', requireAuth, async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Delete FAQ route error:', error);
+    logger.error('Delete FAQ error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete FAQ'
-    });
-  }
-});
-
-/**
- * Bulk update FAQ status
- * POST /api/admin/faqs/bulk-update
- */
-router.post('/faqs/bulk-update', requireAuth, [
-  body('ids').isArray().withMessage('IDs array is required'),
-  body('action').isIn(['publish', 'unpublish', 'delete']).withMessage('Valid action is required')
-], async (req, res) => {
-  try {
-    // Validate input
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
-    const { ids, action } = req.body;
-
-    if (ids.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No IDs provided'
-      });
-    }
-
-    let query;
-    let message;
-
-    switch (action) {
-      case 'publish':
-        query = 'UPDATE public_faqs SET is_published = true WHERE id = ANY($1)';
-        message = 'FAQs published successfully';
-        break;
-      case 'unpublish':
-        query = 'UPDATE public_faqs SET is_published = false WHERE id = ANY($1)';
-        message = 'FAQs unpublished successfully';
-        break;
-      case 'delete':
-        query = 'DELETE FROM public_faqs WHERE id = ANY($1)';
-        message = 'FAQs deleted successfully';
-        break;
-      default:
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid action'
-        });
-    }
-
-    const result = await db.query(query, [ids]);
-
-    logger.info(`Admin bulk ${action} FAQs: ${result.rowCount} affected`);
-
-    res.json({
-      success: true,
-      message,
-      affected: result.rowCount
-    });
-
-  } catch (error) {
-    logger.error('Bulk update FAQs route error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update FAQs'
-    });
-  }
-});
-
-/**
- * Get FAQ statistics for admin
- * GET /api/admin/faqs/stats
- */
-router.get('/faqs/stats', requireAuth, async (req, res) => {
-  try {
-    const statsQuery = `
-      SELECT 
-        COUNT(*) as total_faqs,
-        COUNT(CASE WHEN is_published = true THEN 1 END) as published_faqs,
-        COUNT(CASE WHEN is_published = false THEN 1 END) as draft_faqs,
-        COUNT(DISTINCT category) as total_categories,
-        SUM(view_count) as total_views,
-        SUM(helpful_count) as total_helpful,
-        SUM(not_helpful_count) as total_not_helpful,
-        AVG(view_count) as avg_views,
-        MAX(view_count) as max_views
-      FROM public_faqs
-    `;
-
-    const result = await db.query(statsQuery);
-    const stats = result.rows[0];
-
-    res.json({
-      success: true,
-      stats: {
-        totalFaqs: parseInt(stats.total_faqs),
-        publishedFaqs: parseInt(stats.published_faqs),
-        draftFaqs: parseInt(stats.draft_faqs),
-        totalCategories: parseInt(stats.total_categories),
-        totalViews: parseInt(stats.total_views || 0),
-        totalHelpful: parseInt(stats.total_helpful || 0),
-        totalNotHelpful: parseInt(stats.total_not_helpful || 0),
-        avgViews: parseFloat(stats.avg_views || 0),
-        maxViews: parseInt(stats.max_views || 0)
-      }
-    });
-
-  } catch (error) {
-    logger.error('Admin FAQ stats route error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to load statistics'
     });
   }
 });

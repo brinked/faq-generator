@@ -22,22 +22,44 @@ async function initAdmin() {
     `);
     
     if (!tableCheck.rows[0].exists) {
-      console.log('📋 Running authentication migration...');
+      console.log('📋 Creating authentication tables...');
       
-      // Run the migration
-      const fs = require('fs');
-      const path = require('path');
-      const migrationPath = path.join(__dirname, '../database/migrations/add_auth_and_public_faqs.sql');
-      
-      if (!fs.existsSync(migrationPath)) {
-        console.error('❌ Migration file not found:', migrationPath);
-        return;
-      }
-      
-      const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+      // Create admin tables directly (more reliable than migration file)
+      const authTableSQL = `
+        -- Create admin_users table
+        CREATE TABLE IF NOT EXISTS admin_users (
+          id UUID NOT NULL DEFAULT uuid_generate_v4(),
+          username VARCHAR(255) NOT NULL UNIQUE,
+          email VARCHAR(255) NOT NULL UNIQUE,
+          password_hash VARCHAR(255) NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          last_login_at TIMESTAMP WITH TIME ZONE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          CONSTRAINT admin_users_pkey PRIMARY KEY (id)
+        );
+        
+        -- Create admin_sessions table
+        CREATE TABLE IF NOT EXISTS admin_sessions (
+          id UUID NOT NULL DEFAULT uuid_generate_v4(),
+          user_id UUID NOT NULL,
+          token_hash VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          CONSTRAINT admin_sessions_pkey PRIMARY KEY (id),
+          CONSTRAINT admin_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES admin_users (id)
+        );
+        
+        -- Create indexes for admin tables
+        CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users (username);
+        CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);
+        CREATE INDEX IF NOT EXISTS idx_admin_sessions_token_hash ON admin_sessions (token_hash);
+        CREATE INDEX IF NOT EXISTS idx_admin_sessions_user_id ON admin_sessions (user_id);
+        CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions (expires_at);
+      `;
       
       // Split the SQL into individual statements
-      const statements = migrationSQL
+      const statements = authTableSQL
         .split(';')
         .map(stmt => stmt.trim())
         .filter(stmt => stmt.length > 0);
@@ -45,12 +67,12 @@ async function initAdmin() {
       for (let i = 0; i < statements.length; i++) {
         const statement = statements[i];
         if (statement.trim()) {
-          console.log(`  Executing statement ${i + 1}/${statements.length}...`);
+          console.log(`  Creating table ${i + 1}/${statements.length}...`);
           await client.query(statement);
         }
       }
       
-      console.log('✅ Authentication migration completed!');
+      console.log('✅ Authentication tables created!');
     } else {
       console.log('✅ Authentication tables already exist');
     }
@@ -87,7 +109,9 @@ async function initAdmin() {
       console.log('✅ Admin user password updated');
     }
     
-    // Create some sample public FAQs
+    // Create some sample public FAQs (commented out for clean workflow)
+    // Uncomment below for offline testing only
+    /*
     console.log('📝 Creating sample public FAQs...');
     
     const sampleFaqs = [
@@ -116,16 +140,16 @@ async function initAdmin() {
     
     for (const faq of sampleFaqs) {
       const existingFaq = await client.query(
-        'SELECT id FROM public_faqs WHERE title = $1',
+        'SELECT id FROM faq_groups WHERE title = $1',
         [faq.title]
       );
       
       if (existingFaq.rows.length === 0) {
         await client.query(`
-          INSERT INTO public_faqs (
-            title, question, answer, category, tags, 
-            is_published, sort_order
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO faq_groups (
+            title, representative_question, consolidated_answer, category, tags, 
+            is_published, sort_order, question_count, frequency_score, avg_confidence
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [
           faq.title,
           faq.question,
@@ -133,12 +157,16 @@ async function initAdmin() {
           faq.category,
           faq.tags,
           true,
-          1
+          1,
+          1, // question_count
+          1.0, // frequency_score
+          0.95 // avg_confidence
         ]);
       }
     }
     
     console.log('✅ Sample FAQs created');
+    */
     
     console.log('\n🎉 FAQ Generator Authentication System is ready!');
     console.log('\n📋 Next steps:');
