@@ -46,6 +46,11 @@ code {
   @apply bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200;
 }
 
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
 /* Color scheme variables */
 .primary-600 { @apply text-blue-600; }
 .primary-700 { @apply text-blue-700; }
@@ -141,5 +146,16 @@ code {
   
   .filter-container {
     @apply grid-cols-1 gap-3;
+  }
+}
+
+/* Mobile menu improvements */
+@media (max-width: 768px) {
+  .mobile-menu-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-50 z-40;
+  }
+  
+  .mobile-menu-content {
+    @apply relative z-50;
   }
 }

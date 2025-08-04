@@ -2,13 +2,9 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
-// Public Components
 import PublicLanding from './components/PublicLanding';
 import PublicFAQDisplay from './components/PublicFAQDisplay';
 import AdminLogin from './components/AdminLogin';
-
-// Admin Components (existing app functionality)
 import AdminDashboard from './components/AdminDashboard';
 
 function App() {
@@ -16,23 +12,21 @@ function App() {
     <Router>
       <div className="App">
         <Routes>
-          {/* Public Routes */}
           <Route path="/" element={<PublicLanding />} />
           <Route path="/faq" element={<PublicFAQDisplay />} />
-          
-          {/* Admin Routes */}
+
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/*" element={<AdminDashboard />} />
-          
+
           {/* Redirect old routes to admin */}
           <Route path="/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/accounts" element={<Navigate to="/admin/accounts" replace />} />
           <Route path="/faqs" element={<Navigate to="/admin/faqs" replace />} />
-          
+
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        
+
         <ToastContainer
           position="top-right"
           autoClose={5000}

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 import { toast } from 'react-toastify';
 
-// Components
 import Header from './Header';
 import StepIndicator from './StepIndicator';
 import EmailConnectionWizard from './EmailConnectionWizard';
@@ -15,7 +14,6 @@ import SettingsModal from './SettingsModal';
 import LoadingSpinner from './LoadingSpinner';
 import FAQProcessor from './FAQProcessor';
 
-// Services
 import { apiService } from '../services/apiService';
 
 const STEPS = [
@@ -38,11 +36,10 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Check authentication
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // First check if we have a token locally
         if (!apiService.isAuthenticated()) {
           navigate('/admin/login');
           return;
@@ -54,7 +51,6 @@ const AdminDashboard = () => {
           setIsAuthenticated(true);
           setUser(data.user);
         } else {
-          // Token is invalid, clear it and redirect
           apiService.setToken(null);
           navigate('/admin/login');
         }
@@ -68,11 +64,8 @@ const AdminDashboard = () => {
     checkAuth();
   }, [navigate]);
 
-  // Handle OAuth callback parameters and popup messages
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    // Handle direct URL parameters (fallback)
     const urlParams = new URLSearchParams(location.search);
     const success = urlParams.get('success');
     const error = urlParams.get('error');

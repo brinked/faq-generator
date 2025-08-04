@@ -105,20 +105,6 @@ class ApiService {
     return this.request('/api/auth/outlook');
   }
 
-  async getGmailAuthUrl() {
-    console.log('Requesting Gmail auth URL');
-    const response = await this.request('/api/auth/gmail/url');
-    console.log('Gmail auth URL response:', response);
-    return response.authUrl;
-  }
-
-  async getOutlookAuthUrl() {
-    console.log('Requesting Outlook auth URL');
-    const response = await this.request('/api/auth/outlook/url');
-    console.log('Outlook auth URL response:', response);
-    return response.authUrl;
-  }
-
   async handleGmailCallback(code) {
     return this.request('/api/auth/gmail/callback', {
       method: 'POST',
@@ -204,12 +190,6 @@ class ApiService {
     });
   }
 
-  async regenerateFAQs() {
-    return this.request('/api/faqs/regenerate', {
-      method: 'POST',
-    });
-  }
-
   async publishAllFAQs() {
     return this.request('/api/faqs/publish-all', {
       method: 'POST',
@@ -228,11 +208,6 @@ class ApiService {
 
   async getFAQSources(faqId) {
     return this.request(`/api/faq-sources/${faqId}/sources`);
-  }
-
-  // Dashboard and analytics
-  async getDashboardStats() {
-    return this.request('/api/dashboard/stats');
   }
 
   async getEmailAnalytics(timeRange = '30d') {
@@ -341,23 +316,23 @@ class ApiService {
   // Authentication methods
   async login(username, password) {
     const response = await this.post('/api/auth/login', { username, password });
-    
+
     // Store token if login successful
     if (response.success && response.token) {
       this.token = response.token;
       localStorage.setItem('adminToken', response.token);
     }
-    
+
     return response;
   }
 
   async logout() {
     const response = await this.post('/api/auth/logout');
-    
+
     // Clear token on logout
     this.token = null;
     localStorage.removeItem('adminToken');
-    
+
     return response;
   }
 

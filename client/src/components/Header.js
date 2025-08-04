@@ -1,8 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const Header = ({ user, onLogout, onSettings }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef(null);
+  const hamburgerRef = useRef(null);
+
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        isMobileMenuOpen &&
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target) &&
+        hamburgerRef.current &&
+        !hamburgerRef.current.contains(event.target)
+      ) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMobileMenuOpen]);
+
+  const handleMobileMenuToggle = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  const handleLogout = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsMobileMenuOpen(false);
+    onLogout();
+  };
+
+  const handleSettings = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsMobileMenuOpen(false);
+    onSettings();
+  };
 
   return (
     <header className="glass border-b border-white/20 backdrop-blur-xl sticky top-0 z-50">
@@ -13,7 +56,7 @@ const Header = ({ user, onLogout, onSettings }) => {
           transition={{ duration: 0.5 }}
           className="flex items-center justify-between"
         >
-          <div className="flex items-center space-x-4">
+          <Link to="/" className="flex items-center space-x-4 hover:opacity-80 transition-opacity">
             <div className="relative">
               <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-2xl shadow-lg">
                 <svg
@@ -41,7 +84,7 @@ const Header = ({ user, onLogout, onSettings }) => {
                 AI-powered FAQ generation from your emails
               </p>
             </div>
-          </div>
+          </Link>
 
           <div className="flex items-center space-x-6">
             {/* Status indicator - hidden on mobile */}
@@ -54,7 +97,7 @@ const Header = ({ user, onLogout, onSettings }) => {
                 <span className="text-sm font-medium text-gray-700">System Online</span>
               </div>
             </div>
-            
+
             {/* Desktop navigation */}
             {user && (
               <div className="hidden md:flex items-center space-x-4">
@@ -62,7 +105,7 @@ const Header = ({ user, onLogout, onSettings }) => {
                   <p className="text-sm font-medium text-gray-900">{user.username}</p>
                   <p className="text-xs text-gray-500">Admin</p>
                 </div>
-                
+
                 {/* Settings button - before logout */}
                 <button
                   onClick={onSettings}
@@ -89,7 +132,7 @@ const Header = ({ user, onLogout, onSettings }) => {
                     />
                   </svg>
                 </button>
-                
+
                 {/* Logout button */}
                 <button
                   onClick={onLogout}
@@ -112,13 +155,16 @@ const Header = ({ user, onLogout, onSettings }) => {
                 </button>
               </div>
             )}
-            
+
             {/* Mobile hamburger menu */}
             {user && (
               <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                ref={hamburgerRef}
+                onClick={handleMobileMenuToggle}
                 className="md:hidden group p-3 text-gray-500 hover:text-gray-700 transition-all duration-200 bg-white/60 hover:bg-white/80 rounded-xl backdrop-blur-sm border border-white/30 hover:shadow-lg focus-ring"
                 title="Menu"
+                aria-label="Toggle mobile menu"
+                aria-expanded={isMobileMenuOpen}
               >
                 <svg
                   className="w-5 h-5 transition-transform"
@@ -151,13 +197,14 @@ const Header = ({ user, onLogout, onSettings }) => {
         <AnimatePresence>
           {isMobileMenuOpen && (
             <motion.div
+              ref={mobileMenuRef}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3 }}
-              className="md:hidden mt-4 overflow-hidden"
+              className="md:hidden mt-4 overflow-hidden mobile-menu-content"
             >
-              <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/30 p-4 space-y-3">
+              <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/30 p-4 space-y-3 shadow-lg">
                 <div className="flex items-center space-x-3 p-3 bg-gray-50/50 rounded-lg">
                   <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
                     <span className="text-white text-sm font-semibold">
@@ -169,7 +216,7 @@ const Header = ({ user, onLogout, onSettings }) => {
                     <p className="text-xs text-gray-500">Admin</p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-2 text-sm text-gray-600 p-2">
                   <div className="relative">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -177,12 +224,9 @@ const Header = ({ user, onLogout, onSettings }) => {
                   </div>
                   <span>System Online</span>
                 </div>
-                
+
                 <button
-                  onClick={() => {
-                    onSettings();
-                    setIsMobileMenuOpen(false);
-                  }}
+                  onClick={handleSettings}
                   className="w-full flex items-center space-x-3 p-3 text-gray-700 hover:bg-gray-100/50 rounded-lg transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -201,12 +245,9 @@ const Header = ({ user, onLogout, onSettings }) => {
                   </svg>
                   <span>Settings</span>
                 </button>
-                
+
                 <button
-                  onClick={() => {
-                    onLogout();
-                    setIsMobileMenuOpen(false);
-                  }}
+                  onClick={handleLogout}
                   className="w-full flex items-center space-x-3 p-3 text-red-600 hover:bg-red-50/50 rounded-lg transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
