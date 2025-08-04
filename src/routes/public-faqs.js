@@ -73,6 +73,46 @@ router.get('/faqs', async (req, res) => {
 });
 
 /**
+ * Get FAQ statistics
+ * GET /api/public/faqs/stats
+ */
+router.get('/faqs/stats', async (req, res) => {
+  try {
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_faqs,
+        COUNT(DISTINCT category) as total_categories,
+        SUM(view_count) as total_views,
+        SUM(helpful_count) as total_helpful,
+        SUM(not_helpful_count) as total_not_helpful
+      FROM faq_groups
+      WHERE is_published = true
+    `;
+
+    const result = await db.query(statsQuery);
+    const stats = result.rows[0];
+
+    res.json({
+      success: true,
+      stats: {
+        totalFaqs: parseInt(stats.total_faqs),
+        totalCategories: parseInt(stats.total_categories),
+        totalViews: parseInt(stats.total_views || 0),
+        totalHelpful: parseInt(stats.total_helpful || 0),
+        totalNotHelpful: parseInt(stats.total_not_helpful || 0)
+      }
+    });
+
+  } catch (error) {
+    logger.error('FAQ stats route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to load statistics'
+    });
+  }
+});
+
+/**
  * Get a single public FAQ by ID
  * GET /api/public/faqs/:id
  */
@@ -246,46 +286,6 @@ router.post('/faqs/search', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Search failed'
-    });
-  }
-});
-
-/**
- * Get FAQ statistics
- * GET /api/public/faqs/stats
- */
-router.get('/faqs/stats', async (req, res) => {
-  try {
-    const statsQuery = `
-      SELECT 
-        COUNT(*) as total_faqs,
-        COUNT(DISTINCT category) as total_categories,
-        SUM(view_count) as total_views,
-        SUM(helpful_count) as total_helpful,
-        SUM(not_helpful_count) as total_not_helpful
-      FROM public_faqs
-      WHERE is_published = true
-    `;
-
-    const result = await db.query(statsQuery);
-    const stats = result.rows[0];
-
-    res.json({
-      success: true,
-      stats: {
-        totalFaqs: parseInt(stats.total_faqs),
-        totalCategories: parseInt(stats.total_categories),
-        totalViews: parseInt(stats.total_views || 0),
-        totalHelpful: parseInt(stats.total_helpful || 0),
-        totalNotHelpful: parseInt(stats.total_not_helpful || 0)
-      }
-    });
-
-  } catch (error) {
-    logger.error('FAQ stats route error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to load statistics'
     });
   }
 });

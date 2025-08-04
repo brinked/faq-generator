@@ -38,13 +38,12 @@ const PublicFAQDisplay = () => {
         setCategories(data.categories || []);
         setPagination(data.pagination);
       } else {
-        toast.error('Failed to load FAQs');
+        console.log('Failed to load FAQs');
         setFaqs([]);
         setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching FAQs:', error);
-      toast.error('Failed to load FAQs');
     } finally {
       setLoading(false);
     }
@@ -67,12 +66,12 @@ const PublicFAQDisplay = () => {
     e.preventDefault();
     const newSearch = searchQuery.trim();
     const newCategory = selectedCategory;
-    
+
     setSearchParams({
       ...(newSearch && { search: newSearch }),
       ...(newCategory && { category: newCategory })
     });
-    
+
     fetchFAQs(1, newSearch, newCategory);
   };
 
@@ -80,12 +79,12 @@ const PublicFAQDisplay = () => {
   const handleCategoryChange = (category) => {
     const newCategory = category === selectedCategory ? '' : category;
     setSelectedCategory(newCategory);
-    
+
     setSearchParams({
       ...(searchQuery && { search: searchQuery }),
       ...(newCategory && { category: newCategory })
     });
-    
+
     fetchFAQs(1, searchQuery, newCategory);
   };
 
@@ -131,19 +130,19 @@ const PublicFAQDisplay = () => {
 
     try {
       // Submit feedback to server
-      await apiService.post(`/api/public/faqs/${faqId}/feedback`, { 
+      await apiService.post(`/api/public/faqs/${faqId}/feedback`, {
         helpful: newVote === 'helpful',
-        removeVote: newVote === null 
+        removeVote: newVote === null
       });
 
       // Update the FAQ in the list
-      setFaqs(prevFaqs => 
+      setFaqs(prevFaqs =>
         prevFaqs.map(faq => {
           if (faq.id !== faqId) return faq;
-          
+
           let newHelpfulCount = faq.helpful_count;
           let newNotHelpfulCount = faq.not_helpful_count;
-          
+
           // Adjust counts based on vote change
           if (currentVote === 'helpful' && newVote === null) {
             // Removing helpful vote
@@ -166,7 +165,7 @@ const PublicFAQDisplay = () => {
             // Adding not helpful vote
             newNotHelpfulCount = faq.not_helpful_count + 1;
           }
-          
+
           return {
             ...faq,
             helpful_count: newHelpfulCount,
@@ -180,12 +179,12 @@ const PublicFAQDisplay = () => {
         ...userVotes,
         [faqId]: newVote
       };
-      
+
       // Remove the entry if vote is null
       if (newVote === null) {
         delete newUserVotes[faqId];
       }
-      
+
       setUserVotes(newUserVotes);
       localStorage.setItem('faq_user_votes', JSON.stringify(newUserVotes));
 
@@ -219,18 +218,38 @@ const PublicFAQDisplay = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="text-2xl font-bold text-gray-900">
-              FAQ Generator
-            </Link>
-            <Link
-              to="/admin/login"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-            >
-              Admin Login
-            </Link>
+        <div className="max-w-7xl mx-auto px-4 py-2 sm:px-6 lg:px-8">
+          <Link to="/" className="text-2xl font-bold text-gray-900 mb-2 block">
+            <div className="flex items-center space-x-4">
+            <div className="relative">
+              <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-2xl shadow-lg">
+                <svg
+                  className="w-8 h-8 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white animate-pulse"></div>
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
+                FAQ Generator
+              </h1>
+              <p className="text-sm text-gray-600 font-medium">
+                AI-powered FAQ generation from your emails
+              </p>
+            </div>
           </div>
+          </Link>
         </div>
       </nav>
 
@@ -242,7 +261,7 @@ const PublicFAQDisplay = () => {
           </h1>
           {stats && (
             <p className="text-gray-600">
-              {stats.totalFaqs} questions • {stats.totalCategories} categories • {stats.totalViews} views
+              {stats.totalFaqs} questions • {stats.totalCategories} categories
             </p>
           )}
         </div>
@@ -317,7 +336,7 @@ const PublicFAQDisplay = () => {
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">No FAQs found</h3>
               <p className="text-gray-600">
-                {searchQuery || selectedCategory 
+                {searchQuery || selectedCategory
                   ? 'Try adjusting your search or category filter.'
                   : 'No FAQs are available at the moment.'
                 }
@@ -356,8 +375,6 @@ const PublicFAQDisplay = () => {
                             {faq.category}
                           </span>
                         )}
-                        <span>{faq.view_count} views</span>
-                        <span>{faq.helpful_count + faq.not_helpful_count} responses</span>
                       </div>
 
                       {/* Feedback buttons */}
@@ -412,7 +429,7 @@ const PublicFAQDisplay = () => {
               >
                 Previous
               </button>
-              
+
               {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => (
                 <button
                   key={page}
@@ -426,7 +443,7 @@ const PublicFAQDisplay = () => {
                   {page}
                 </button>
               ))}
-              
+
               <button
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page >= pagination.pages}
@@ -442,4 +459,4 @@ const PublicFAQDisplay = () => {
   );
 };
 
-export default PublicFAQDisplay; 
+export default PublicFAQDisplay;
