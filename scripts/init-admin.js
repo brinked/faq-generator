@@ -9,10 +9,10 @@ const pool = new Pool({
 
 async function initAdmin() {
   const client = await pool.connect();
-  
+
   try {
     console.log('🚀 Initializing FAQ Generator with Authentication System...');
-    
+
     // Check if admin_users table exists
     const tableCheck = await client.query(`
       SELECT EXISTS (
@@ -20,10 +20,10 @@ async function initAdmin() {
         WHERE table_name = 'admin_users'
       );
     `);
-    
+
     if (!tableCheck.rows[0].exists) {
       console.log('📋 Creating authentication tables...');
-      
+
       // Create admin tables directly (more reliable than migration file)
       const authTableSQL = `
         -- Create admin_users table
@@ -57,13 +57,13 @@ async function initAdmin() {
         CREATE INDEX IF NOT EXISTS idx_admin_sessions_user_id ON admin_sessions (user_id);
         CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions (expires_at);
       `;
-      
+
       // Split the SQL into individual statements
       const statements = authTableSQL
         .split(';')
         .map(stmt => stmt.trim())
         .filter(stmt => stmt.length > 0);
-      
+
       for (let i = 0; i < statements.length; i++) {
         const statement = statements[i];
         if (statement.trim()) {
@@ -71,30 +71,30 @@ async function initAdmin() {
           await client.query(statement);
         }
       }
-      
+
       console.log('✅ Authentication tables created!');
     } else {
       console.log('✅ Authentication tables already exist');
     }
-    
+
     // Set up admin user
-    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@faqgenerator.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-    
+    const adminUsername = process.env.ADMIN_USERNAME;
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
     console.log('👤 Setting up admin user...');
     console.log(`  Username: ${adminUsername}`);
     console.log(`  Email: ${adminEmail}`);
     console.log(`  Password: ${adminPassword} (change this in production!)`);
-    
+
     const passwordHash = await bcrypt.hash(adminPassword, 12);
-    
+
     // Check if admin user exists
     const existingUser = await client.query(
       'SELECT id FROM admin_users WHERE username = $1 OR email = $2',
       [adminUsername, adminEmail]
     );
-    
+
     if (existingUser.rows.length === 0) {
       await client.query(
         'INSERT INTO admin_users (username, email, password_hash) VALUES ($1, $2, $3)',
@@ -108,12 +108,12 @@ async function initAdmin() {
       );
       console.log('✅ Admin user password updated');
     }
-    
+
     // Create some sample public FAQs (commented out for clean workflow)
     // Uncomment below for offline testing only
     /*
     console.log('📝 Creating sample public FAQs...');
-    
+
     const sampleFaqs = [
       {
         title: 'How do I reset my password?',
@@ -137,17 +137,17 @@ async function initAdmin() {
         tags: ['contact', 'support', 'help']
       }
     ];
-    
+
     for (const faq of sampleFaqs) {
       const existingFaq = await client.query(
         'SELECT id FROM faq_groups WHERE title = $1',
         [faq.title]
       );
-      
+
       if (existingFaq.rows.length === 0) {
         await client.query(`
           INSERT INTO faq_groups (
-            title, representative_question, consolidated_answer, category, tags, 
+            title, representative_question, consolidated_answer, category, tags,
             is_published, sort_order, question_count, frequency_score, avg_confidence
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [
@@ -164,10 +164,10 @@ async function initAdmin() {
         ]);
       }
     }
-    
+
     console.log('✅ Sample FAQs created');
     */
-    
+
     console.log('\n🎉 FAQ Generator Authentication System is ready!');
     console.log('\n📋 Next steps:');
     console.log('  1. Start the server: npm start');
@@ -177,7 +177,7 @@ async function initAdmin() {
     console.log(`     Username: ${adminUsername}`);
     console.log(`     Password: ${adminPassword}`);
     console.log('\n⚠️  Remember to change the admin password in production!');
-    
+
   } catch (error) {
     console.error('❌ Initialization failed:', error);
     throw error;
@@ -188,4 +188,4 @@ async function initAdmin() {
 }
 
 // Run the initialization
-initAdmin().catch(console.error); 
+initAdmin().catch(console.error);
