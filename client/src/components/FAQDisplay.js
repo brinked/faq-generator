@@ -33,7 +33,7 @@ const highlightQuestionInText = (emailText, questionText) => {
   return escapedEmailText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
 };
 
-const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing }) => {
+const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing, onUpdateFAQs }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState('frequency');
@@ -43,6 +43,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
   const [isExporting, setIsExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [showSourcesModal, setShowSourcesModal] = useState(false);
@@ -92,6 +93,10 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
       paginatedFAQs: paginated
     };
   }, [faqs, searchQuery, selectedCategory, sortBy, currentPage, itemsPerPage]);
+
+  // Count published/unpublished FAQs
+  const publishedCount = faqs.filter(faq => faq.is_published).length;
+  const unpublishedCount = faqs.filter(faq => !faq.is_published).length;
 
   // Reset to first page when filters change
   React.useEffect(() => {
@@ -183,12 +188,58 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
     try {
       const result = await apiService.publishAllFAQs();
       toast.success(`Published ${result.publishedCount} FAQs successfully!`);
-      onRefreshFAQs();
+      
+      // Update local state immediately to reflect the changes
+      // This will cause the button to change state without waiting for a server refresh
+      const updatedFaqs = faqs.map(faq => ({
+        ...faq,
+        is_published: true
+      }));
+      
+      // Update the parent component's state immediately
+      if (onUpdateFAQs) {
+        onUpdateFAQs(updatedFaqs);
+      } else if (onRefreshFAQs) {
+        // Fallback to refresh if onUpdateFAQs is not provided
+        setTimeout(() => {
+          onRefreshFAQs();
+        }, 100);
+      }
     } catch (error) {
       console.error('Failed to publish FAQs:', error);
       toast.error('Failed to publish FAQs');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleUnpublishFAQs = async () => {
+    setUnpublishing(true);
+    try {
+      const result = await apiService.unpublishAllFAQs();
+      toast.success(`Unpublished ${result.unpublishedCount} FAQs successfully!`);
+      
+      // Update local state immediately to reflect the changes
+      // This will cause the button to change state without waiting for a server refresh
+      const updatedFaqs = faqs.map(faq => ({
+        ...faq,
+        is_published: false
+      }));
+      
+      // Update the parent component's state immediately
+      if (onUpdateFAQs) {
+        onUpdateFAQs(updatedFaqs);
+      } else if (onRefreshFAQs) {
+        // Fallback to refresh if onUpdateFAQs is not provided
+        setTimeout(() => {
+          onRefreshFAQs();
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Failed to unpublish FAQs:', error);
+      toast.error('Failed to unpublish FAQs');
+    } finally {
+      setUnpublishing(false);
     }
   };
 
@@ -271,18 +322,43 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               <span>Refresh</span>
             </button>
 
-            <button
-              onClick={handlePublishFAQs}
-              disabled={publishing}
-              className="btn-primary flex items-center space-x-2"
-            >
-              {publishing ? <ButtonSpinner /> : (
+            {unpublishedCount > 0 ? (
+              <button
+                onClick={handlePublishFAQs}
+                disabled={publishing}
+                className="btn-primary flex items-center space-x-2"
+              >
+                {publishing ? <ButtonSpinner /> : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                <span>Publish FAQs ({unpublishedCount})</span>
+              </button>
+            ) : publishedCount > 0 ? (
+              <button
+                onClick={handleUnpublishFAQs}
+                disabled={unpublishing}
+                className="btn-secondary flex items-center space-x-2"
+              >
+                {unpublishing ? <ButtonSpinner /> : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+                  </svg>
+                )}
+                <span>Unpublish FAQs ({publishedCount})</span>
+              </button>
+            ) : (
+              <button
+                disabled={true}
+                className="btn-secondary flex items-center space-x-2 opacity-50 cursor-not-allowed"
+              >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-              )}
-              <span>Publish FAQs</span>
-            </button>
+                <span>No FAQs Available</span>
+              </button>
+            )}
             
             <div className="relative">
               <button

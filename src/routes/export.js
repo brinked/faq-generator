@@ -591,4 +591,102 @@ router.post('/import', async (req, res) => {
   }
 });
 
+/**
+ * Export FAQs
+ */
+router.get('/faqs', async (req, res) => {
+  try {
+    const { format = 'json' } = req.query;
+    const db = require('../config/database');
+    
+    logger.info('Exporting FAQs...');
+    
+    // Get all FAQs from faq_groups table
+    const faqsQuery = `
+      SELECT 
+        id, 
+        title,
+        representative_question as question,
+        consolidated_answer as answer,
+        category, 
+        tags, 
+        is_published,
+        sort_order,
+        question_count,
+        frequency_score,
+        avg_confidence,
+        view_count,
+        helpful_count,
+        not_helpful_count,
+        created_at, 
+        updated_at
+      FROM faq_groups
+      ORDER BY sort_order ASC, created_at DESC
+    `;
+    
+    const result = await db.query(faqsQuery);
+    const faqs = result.rows;
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    if (format === 'csv') {
+      // Convert to CSV
+      const headers = [
+        'ID', 'Title', 'Question', 'Answer', 'Category', 'Tags',
+        'Is Published', 'Sort Order', 'Question Count', 'Frequency Score',
+        'Avg Confidence', 'View Count', 'Helpful Count', 'Not Helpful Count',
+        'Created At', 'Updated At'
+      ];
+      
+      const csvHeader = headers.join(',') + '\n';
+      const csvRows = faqs.map(faq => {
+        const row = [
+          faq.id,
+          `"${(faq.title || '').replace(/"/g, '""')}"`,
+          `"${(faq.question || '').replace(/"/g, '""')}"`,
+          `"${(faq.answer || '').replace(/"/g, '""')}"`,
+          `"${(faq.category || '').replace(/"/g, '""')}"`,
+          `"${(Array.isArray(faq.tags) ? faq.tags.join(';') : '').replace(/"/g, '""')}"`,
+          faq.is_published ? 'Yes' : 'No',
+          faq.sort_order || 0,
+          faq.question_count || 0,
+          faq.frequency_score || 0,
+          faq.avg_confidence || 0,
+          faq.view_count || 0,
+          faq.helpful_count || 0,
+          faq.not_helpful_count || 0,
+          faq.created_at,
+          faq.updated_at
+        ];
+        return row.join(',');
+      }).join('\n');
+      
+      const csvContent = csvHeader + csvRows;
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="faqs-${timestamp}.csv"`);
+      res.send(csvContent);
+      
+    } else {
+      // JSON format
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="faqs-${timestamp}.json"`);
+      res.json({
+        exported_at: new Date().toISOString(),
+        total_faqs: faqs.length,
+        published_faqs: faqs.filter(faq => faq.is_published).length,
+        unpublished_faqs: faqs.filter(faq => !faq.is_published).length,
+        faqs
+      });
+    }
+    
+  } catch (error) {
+    logger.error('Error exporting FAQs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to export FAQs'
+    });
+  }
+});
+
 module.exports = router;

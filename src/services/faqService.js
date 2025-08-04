@@ -504,7 +504,7 @@ class FAQService {
           fg.consolidated_answer as answer,
           fg.category,
           fg.frequency_score as frequency,
-          fg.is_published as published,
+          fg.is_published,
           fg.created_at,
           fg.updated_at,
           COUNT(qg.question_id) as actual_question_count
@@ -539,7 +539,7 @@ class FAQService {
         answer: faq.answer,
         category: faq.category,
         frequency: Math.round(faq.frequency || 0),
-        published: faq.published,
+        is_published: faq.is_published,
         created_at: faq.created_at,
         updated_at: faq.updated_at
       }));
@@ -696,6 +696,37 @@ class FAQService {
 
     } catch (error) {
       logger.error('Error publishing all FAQs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unpublish all published FAQs
+   */
+  async unpublishAllFAQs() {
+    try {
+      // Get current counts
+      const totalResult = await db.query('SELECT COUNT(*) as count FROM faq_groups');
+      const publishedResult = await db.query('SELECT COUNT(*) as count FROM faq_groups WHERE is_published = true');
+
+      // Update all published FAQs to be unpublished
+      const updateResult = await db.query(`
+        UPDATE faq_groups
+        SET is_published = false, updated_at = NOW()
+        WHERE is_published = true
+        RETURNING id, title
+      `);
+
+      logger.info(`Unpublished ${updateResult.rowCount} FAQs`);
+
+      return {
+        unpublishedCount: updateResult.rowCount,
+        totalFAQs: parseInt(totalResult.rows[0].count),
+        unpublishedFAQs: updateResult.rows
+      };
+
+    } catch (error) {
+      logger.error('Error unpublishing all FAQs:', error);
       throw error;
     }
   }

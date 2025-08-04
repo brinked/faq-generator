@@ -216,6 +216,12 @@ class ApiService {
     });
   }
 
+  async unpublishAllFAQs() {
+    return this.request('/api/faqs/unpublish-all', {
+      method: 'POST',
+    });
+  }
+
   async getFAQCategories() {
     return this.request('/api/faqs/categories');
   }

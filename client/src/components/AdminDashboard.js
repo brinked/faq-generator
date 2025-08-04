@@ -252,11 +252,11 @@ const AdminDashboard = () => {
   // Handle FAQ refresh
   const handleRefreshFAQs = async () => {
     try {
-      await apiService.regenerateFAQs();
-      toast.success('FAQ regeneration started');
+      await loadFAQs();
+      toast.success('FAQs refreshed successfully');
     } catch (error) {
-      console.error('Failed to regenerate FAQs:', error);
-      toast.error('Failed to regenerate FAQs');
+      console.error('Failed to refresh FAQs:', error);
+      toast.error('Failed to refresh FAQs');
     }
   };
 
@@ -390,6 +390,7 @@ const AdminDashboard = () => {
                 connectedAccounts={connectedAccounts}
                 onRefreshFAQs={handleRefreshFAQs}
                 onBackToProcessing={() => setCurrentStep(2)}
+                onUpdateFAQs={setFaqs}
               />
             </motion.div>
           )}

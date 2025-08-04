@@ -18,6 +18,7 @@ const PublicFAQDisplay = () => {
     pages: 0
   });
   const [stats, setStats] = useState(null);
+  const [userVotes, setUserVotes] = useState({});
 
   // Fetch FAQs
   const fetchFAQs = async (page = 1, search = '', category = '') => {
@@ -93,29 +94,120 @@ const PublicFAQDisplay = () => {
     fetchFAQs(page, searchQuery, selectedCategory);
   };
 
-  // Handle feedback
+  // Handle feedback with toggle functionality
   const handleFeedback = async (faqId, helpful) => {
+    const currentVote = userVotes[faqId];
+    let newVote = null;
+    let shouldSubmit = false;
+
+    // Determine the new vote state
+    if (currentVote === 'helpful') {
+      if (helpful) {
+        // User clicked helpful again - remove vote
+        newVote = null;
+        shouldSubmit = true;
+      } else {
+        // User clicked not helpful - change to not helpful
+        newVote = 'not_helpful';
+        shouldSubmit = true;
+      }
+    } else if (currentVote === 'not_helpful') {
+      if (helpful) {
+        // User clicked helpful - change to helpful
+        newVote = 'helpful';
+        shouldSubmit = true;
+      } else {
+        // User clicked not helpful again - remove vote
+        newVote = null;
+        shouldSubmit = true;
+      }
+    } else {
+      // No previous vote - add new vote
+      newVote = helpful ? 'helpful' : 'not_helpful';
+      shouldSubmit = true;
+    }
+
+    if (!shouldSubmit) return;
+
     try {
-      await apiService.post(`/api/public/faqs/${faqId}/feedback`, { helpful });
+      // Submit feedback to server
+      await apiService.post(`/api/public/faqs/${faqId}/feedback`, { 
+        helpful: newVote === 'helpful',
+        removeVote: newVote === null 
+      });
 
       // Update the FAQ in the list
       setFaqs(prevFaqs => 
-        prevFaqs.map(faq => 
-          faq.id === faqId 
-            ? { 
-                ...faq, 
-                helpful_count: helpful ? faq.helpful_count + 1 : faq.helpful_count,
-                not_helpful_count: helpful ? faq.not_helpful_count : faq.not_helpful_count + 1
-              }
-            : faq
-        )
+        prevFaqs.map(faq => {
+          if (faq.id !== faqId) return faq;
+          
+          let newHelpfulCount = faq.helpful_count;
+          let newNotHelpfulCount = faq.not_helpful_count;
+          
+          // Adjust counts based on vote change
+          if (currentVote === 'helpful' && newVote === null) {
+            // Removing helpful vote
+            newHelpfulCount = Math.max(0, faq.helpful_count - 1);
+          } else if (currentVote === 'not_helpful' && newVote === null) {
+            // Removing not helpful vote
+            newNotHelpfulCount = Math.max(0, faq.not_helpful_count - 1);
+          } else if (currentVote === 'helpful' && newVote === 'not_helpful') {
+            // Changing from helpful to not helpful
+            newHelpfulCount = Math.max(0, faq.helpful_count - 1);
+            newNotHelpfulCount = faq.not_helpful_count + 1;
+          } else if (currentVote === 'not_helpful' && newVote === 'helpful') {
+            // Changing from not helpful to helpful
+            newHelpfulCount = faq.helpful_count + 1;
+            newNotHelpfulCount = Math.max(0, faq.not_helpful_count - 1);
+          } else if (currentVote === null && newVote === 'helpful') {
+            // Adding helpful vote
+            newHelpfulCount = faq.helpful_count + 1;
+          } else if (currentVote === null && newVote === 'not_helpful') {
+            // Adding not helpful vote
+            newNotHelpfulCount = faq.not_helpful_count + 1;
+          }
+          
+          return {
+            ...faq,
+            helpful_count: newHelpfulCount,
+            not_helpful_count: newNotHelpfulCount
+          };
+        })
       );
-      toast.success('Thank you for your feedback!');
+
+      // Update user votes
+      const newUserVotes = {
+        ...userVotes,
+        [faqId]: newVote
+      };
+      
+      // Remove the entry if vote is null
+      if (newVote === null) {
+        delete newUserVotes[faqId];
+      }
+      
+      setUserVotes(newUserVotes);
+      localStorage.setItem('faq_user_votes', JSON.stringify(newUserVotes));
+
+      // Show appropriate message
+      if (newVote === null) {
+        toast.success('Vote removed');
+      } else {
+        toast.success('Thank you for your feedback!');
+      }
     } catch (error) {
       console.error('Error submitting feedback:', error);
       toast.error('Failed to submit feedback');
     }
   };
+
+  // Load user votes from localStorage
+  useEffect(() => {
+    const savedVotes = localStorage.getItem('faq_user_votes');
+    if (savedVotes) {
+      setUserVotes(JSON.parse(savedVotes));
+    }
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -272,21 +364,33 @@ const PublicFAQDisplay = () => {
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => handleFeedback(faq.id, true)}
-                          className="flex items-center space-x-1 text-green-600 hover:text-green-700 text-sm"
+                          className={`flex items-center space-x-1 text-sm transition-colors px-2 py-1 rounded ${
+                            userVotes[faq.id] === 'helpful' 
+                              ? 'text-green-700 bg-green-50 border border-green-200' 
+                              : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                          }`}
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4" fill={userVotes[faq.id] === 'helpful' ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
                           </svg>
-                          <span>Helpful ({faq.helpful_count})</span>
+                          <span>
+                            {userVotes[faq.id] === 'helpful' ? '✓ ' : ''}Helpful ({faq.helpful_count})
+                          </span>
                         </button>
                         <button
                           onClick={() => handleFeedback(faq.id, false)}
-                          className="flex items-center space-x-1 text-red-600 hover:text-red-700 text-sm"
+                          className={`flex items-center space-x-1 text-sm transition-colors px-2 py-1 rounded ${
+                            userVotes[faq.id] === 'not_helpful' 
+                              ? 'text-red-700 bg-red-50 border border-red-200' 
+                              : 'text-red-600 hover:text-red-700 hover:bg-red-50'
+                          }`}
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4" fill={userVotes[faq.id] === 'not_helpful' ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018c.163 0 .326.02.485.06L17 4m-7 10v5a2 2 0 002 2h.095c.5 0 .905-.405.905-.905 0-.714.211-1.412.608-2.006L17 13V4m-7 10h2" />
                           </svg>
-                          <span>Not Helpful ({faq.not_helpful_count})</span>
+                          <span>
+                            {userVotes[faq.id] === 'not_helpful' ? '✓ ' : ''}Not Helpful ({faq.not_helpful_count})
+                          </span>
                         </button>
                       </div>
                     </div>
