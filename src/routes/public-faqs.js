@@ -128,32 +128,58 @@ router.get('/faqs/:id', async (req, res) => {
 });
 
 /**
- * Mark FAQ as helpful or not helpful
+ * Mark FAQ as helpful or not helpful with toggle functionality
  * POST /api/public/faqs/:id/feedback
  */
 router.post('/faqs/:id/feedback', async (req, res) => {
   try {
     const { id } = req.params;
-    const { helpful } = req.body;
+    const { helpful, removeVote } = req.body;
 
-    if (typeof helpful !== 'boolean') {
+    // Validate input
+    if (removeVote && typeof removeVote !== 'boolean') {
       return res.status(400).json({
         success: false,
-        message: 'Helpful field is required and must be a boolean.'
+        message: 'removeVote field must be a boolean when provided.'
       });
     }
 
-    const columnToUpdate = helpful ? 'helpful_count' : 'not_helpful_count';
+    if (!removeVote && typeof helpful !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'Helpful field is required and must be a boolean when not removing vote.'
+      });
+    }
 
-    const updateQuery = `
-      UPDATE faq_groups
-      SET ${columnToUpdate} = ${columnToUpdate} + 1,
-          updated_at = NOW()
-      WHERE id = $1 AND is_published = true
-      RETURNING helpful_count, not_helpful_count;
-    `;
+    let updateQuery;
+    let queryParams = [id];
 
-    const result = await db.query(updateQuery, [id]);
+    if (removeVote) {
+      // Remove vote - decrement the count
+      updateQuery = `
+        UPDATE faq_groups
+        SET helpful_count = GREATEST(helpful_count - 1, 0),
+            not_helpful_count = GREATEST(not_helpful_count - 1, 0),
+            updated_at = NOW()
+        WHERE id = $1 AND is_published = true
+        RETURNING helpful_count, not_helpful_count;
+      `;
+    } else {
+      // Add or toggle vote
+      const helpfulColumn = helpful ? 'helpful_count' : 'not_helpful_count';
+      const notHelpfulColumn = helpful ? 'not_helpful_count' : 'helpful_count';
+      
+      updateQuery = `
+        UPDATE faq_groups
+        SET ${helpfulColumn} = ${helpfulColumn} + 1,
+            ${notHelpfulColumn} = GREATEST(${notHelpfulColumn} - 1, 0),
+            updated_at = NOW()
+        WHERE id = $1 AND is_published = true
+        RETURNING helpful_count, not_helpful_count;
+      `;
+    }
+
+    const result = await db.query(updateQuery, queryParams);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -164,7 +190,7 @@ router.post('/faqs/:id/feedback', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Feedback recorded successfully.',
+      message: removeVote ? 'Vote removed successfully.' : 'Feedback recorded successfully.',
       feedback: result.rows[0]
     });
 
