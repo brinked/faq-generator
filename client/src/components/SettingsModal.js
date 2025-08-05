@@ -15,7 +15,7 @@ const SettingsModal = ({ isOpen, onClose, user }) => {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    
+
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       toast.error('New passwords do not match');
       return;
@@ -195,12 +195,6 @@ const SettingsModal = ({ isOpen, onClose, user }) => {
                       <span className="text-gray-500">Role:</span>
                       <span className="text-gray-900">Administrator</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Last Login:</span>
-                      <span className="text-gray-900">
-                        {user?.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'N/A'}
-                      </span>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -212,4 +206,4 @@ const SettingsModal = ({ isOpen, onClose, user }) => {
   );
 };
 
-export default SettingsModal; 
+export default SettingsModal;

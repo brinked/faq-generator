@@ -8,36 +8,36 @@ const authService = new AuthService();
  */
 const requireAuth = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '') || 
-                  req.cookies?.adminToken ||
-                  req.query?.token;
+    const token = req.headers.authorization?.replace('Bearer ', '') ||
+      req.cookies?.adminToken ||
+      req.query?.token;
 
     if (!token) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Authentication required' 
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
       });
     }
 
     const session = await authService.verifySession(token);
-    
+
     if (!session.valid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: session.message || 'Invalid session' 
+      return res.status(401).json({
+        success: false,
+        message: session.message || 'Invalid session'
       });
     }
 
     // Add user info to request
     req.user = session.user;
     req.token = token;
-    
+
     next();
   } catch (error) {
     logger.error('Auth middleware error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Authentication error' 
+    return res.status(500).json({
+      success: false,
+      message: 'Authentication error'
     });
   }
 };
@@ -47,9 +47,9 @@ const requireAuth = async (req, res, next) => {
  */
 const optionalAuth = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '') || 
-                  req.cookies?.adminToken ||
-                  req.query?.token;
+    const token = req.headers.authorization?.replace('Bearer ', '') ||
+      req.cookies?.adminToken ||
+      req.query?.token;
 
     if (token) {
       const session = await authService.verifySession(token);
@@ -58,7 +58,7 @@ const optionalAuth = async (req, res, next) => {
         req.token = token;
       }
     }
-    
+
     next();
   } catch (error) {
     logger.error('Optional auth middleware error:', error);
@@ -71,9 +71,9 @@ const optionalAuth = async (req, res, next) => {
  */
 const requireAdmin = (req, res, next) => {
   if (!req.user) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Admin access required' 
+    return res.status(401).json({
+      success: false,
+      message: 'Admin access required'
     });
   }
   next();
@@ -83,4 +83,4 @@ module.exports = {
   requireAuth,
   optionalAuth,
   requireAdmin
-}; 
+};

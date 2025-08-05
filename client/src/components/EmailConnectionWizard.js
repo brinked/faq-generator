@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { apiService } from '../services/apiService';
-import LoadingSpinner, { ButtonSpinner } from './LoadingSpinner';
+import { ButtonSpinner } from './LoadingSpinner';
 
 const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccountDisconnected }) => {
   const [connecting, setConnecting] = useState(null);
@@ -10,10 +10,10 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
 
   const handleConnectEmail = async (provider) => {
     setConnecting(provider);
-    
+
     try {
       console.log(`Starting OAuth flow for ${provider}`);
-      
+
       let authUrl;
       if (provider === 'gmail') {
         authUrl = await apiService.getGmailAuthUrl();
@@ -29,7 +29,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
         'oauth',
         'width=500,height=600,scrollbars=yes,resizable=yes'
       );
-      
+
       console.log(`OAuth popup opened:`, popup ? 'success' : 'failed');
 
       // Listen for OAuth callback
@@ -37,16 +37,16 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
         if (popup.closed) {
           clearInterval(checkClosed);
           setConnecting(null);
-          
+
           // Check if account was successfully connected
           setTimeout(async () => {
             try {
               const accounts = await apiService.getConnectedAccounts();
-              const newAccount = accounts.find(acc => 
-                acc.provider === provider && 
+              const newAccount = accounts.find(acc =>
+                acc.provider === provider &&
                 !connectedAccounts.find(existing => existing.id === acc.id)
               );
-              
+
               if (newAccount) {
                 onAccountConnected(newAccount);
               }
@@ -60,12 +60,12 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
       // Handle OAuth message from popup
       const handleMessage = (event) => {
         console.log('Received message:', event.data, 'from origin:', event.origin);
-        
+
         if (event.origin !== window.location.origin) {
           console.log('Ignoring message from different origin');
           return;
         }
-        
+
         if (event.data.type === 'OAUTH_SUCCESS') {
           console.log('OAuth success message received');
           if (popup && !popup.closed) {
@@ -73,7 +73,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
           }
           clearInterval(checkClosed);
           setConnecting(null);
-          
+
           // Reload accounts to get the newly connected account
           setTimeout(async () => {
             try {
@@ -82,7 +82,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
                 acc.provider === event.data.provider &&
                 !connectedAccounts.find(existing => existing.id === acc.id)
               );
-              
+
               if (newAccount) {
                 onAccountConnected(newAccount);
               } else if (event.data.account) {
@@ -111,7 +111,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
       };
 
       window.addEventListener('message', handleMessage);
-      
+
       // Cleanup
       setTimeout(() => {
         window.removeEventListener('message', handleMessage);
@@ -312,7 +312,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
           <div>
             <h4 className="font-medium text-blue-900 mb-1">Your data is secure</h4>
             <p className="text-sm text-blue-700">
-              We use OAuth 2.0 for secure authentication. Your email credentials are never stored on our servers. 
+              We use OAuth 2.0 for secure authentication. Your email credentials are never stored on our servers.
               We only access emails to analyze questions and generate FAQs.
             </p>
           </div>

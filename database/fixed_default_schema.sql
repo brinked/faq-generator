@@ -30,24 +30,24 @@ CREATE TABLE public.email_accounts (id UUID NOT NULL DEFAULT uuid_generate_v4(),
 
 -- Table: emails (UPDATED with FAQ generation columns)
 CREATE TABLE public.emails (
-    id UUID NOT NULL DEFAULT uuid_generate_v4(), 
-    account_id UUID NOT NULL, 
-    message_id VARCHAR(255) NOT NULL, 
+    id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    account_id UUID NOT NULL,
+    message_id VARCHAR(255) NOT NULL,
     thread_id VARCHAR(255),
     subject TEXT,
     body_text TEXT,
     body_html TEXT,
     sender_email VARCHAR(255),
     sender_name VARCHAR(255),
-    recipient_emails TEXT[], 
+    recipient_emails TEXT[],
     cc_emails TEXT[],
     bcc_emails TEXT[],
     received_at TIMESTAMP WITH TIME ZONE,
     sent_at TIMESTAMP WITH TIME ZONE,
-    is_processed BOOLEAN DEFAULT false, 
-    processing_status processing_status DEFAULT 'pending'::processing_status, 
+    is_processed BOOLEAN DEFAULT false,
+    processing_status processing_status DEFAULT 'pending'::processing_status,
     processing_error TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(), 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     -- FAQ Generation columns (ADDED)
     processed_for_faq BOOLEAN NOT NULL DEFAULT false,
@@ -122,5 +122,3 @@ CREATE INDEX idx_questions_email_id ON public.questions USING btree (email_id);
 CREATE INDEX idx_questions_email_subject ON public.questions USING btree (email_subject);
 CREATE INDEX idx_questions_sender_email ON public.questions USING btree (sender_email);
 CREATE UNIQUE INDEX questions_email_question_unique ON public.questions USING btree (email_id, question_text);
-
--- Functions and triggers will be added separately if needed
