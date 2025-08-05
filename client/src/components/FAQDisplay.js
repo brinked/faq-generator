@@ -7,29 +7,29 @@ import LoadingSpinner, { ButtonSpinner } from './LoadingSpinner';
 // Helper function to highlight question text within email content
 const highlightQuestionInText = (emailText, questionText) => {
   if (!emailText || !questionText) return emailText || '';
-  
+
   // Escape HTML in the original text
   const escapeHtml = (text) => {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   };
-  
+
   const escapedEmailText = escapeHtml(emailText);
-  
+
   // Create a case-insensitive regex to find the question text
   // Split question into words and create a flexible pattern
   const questionWords = questionText.trim().split(/\s+/).filter(word => word.length > 2);
-  
+
   if (questionWords.length === 0) return escapedEmailText;
-  
+
   // Create pattern that matches the question words with some flexibility
   const pattern = questionWords.map(word =>
     word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
   ).join('\\s+\\w*\\s*'); // Allow words between question words
-  
+
   const regex = new RegExp(`(${pattern})`, 'gi');
-  
+
   return escapedEmailText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
 };
 
@@ -62,9 +62,9 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
       const matchesSearch = !searchQuery ||
         faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
         faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchesCategory = selectedCategory === 'all' || faq.category === selectedCategory;
-      
+
       return matchesSearch && matchesCategory;
     });
 
@@ -127,7 +127,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
 
   const handleDeleteFAQ = async (faqId) => {
     if (!window.confirm('Are you sure you want to delete this FAQ?')) return;
-    
+
     try {
       await apiService.deleteFAQ(faqId);
       toast.success('FAQ deleted successfully');
@@ -142,7 +142,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
     setIsExporting(true);
     try {
       const data = await apiService.exportFAQs(format);
-      
+
       if (format === 'csv') {
         const blob = new Blob([data], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
@@ -164,7 +164,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }
-      
+
       toast.success(`FAQs exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error('Export failed:', error);
@@ -188,14 +188,13 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
     try {
       const result = await apiService.publishAllFAQs();
       toast.success(`Published ${result.publishedCount} FAQs successfully!`);
-      
+
       // Update local state immediately to reflect the changes
-      // This will cause the button to change state without waiting for a server refresh
       const updatedFaqs = faqs.map(faq => ({
         ...faq,
         is_published: true
       }));
-      
+
       // Update the parent component's state immediately
       if (onUpdateFAQs) {
         onUpdateFAQs(updatedFaqs);
@@ -218,14 +217,13 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
     try {
       const result = await apiService.unpublishAllFAQs();
       toast.success(`Unpublished ${result.unpublishedCount} FAQs successfully!`);
-      
+
       // Update local state immediately to reflect the changes
-      // This will cause the button to change state without waiting for a server refresh
       const updatedFaqs = faqs.map(faq => ({
         ...faq,
         is_published: false
       }));
-      
+
       // Update the parent component's state immediately
       if (onUpdateFAQs) {
         onUpdateFAQs(updatedFaqs);
@@ -307,7 +305,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               <p className="text-sm text-gray-600">Categories</p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleRefresh}
@@ -359,7 +357,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                 <span>No FAQs Available</span>
               </button>
             )}
-            
+
             <div className="relative">
               <button
                 className="btn-secondary flex items-center space-x-2"
@@ -370,7 +368,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                 </svg>
                 <span>Export</span>
               </button>
-              
+
               <div id="export-menu" className="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
                 <button
                   onClick={() => handleExport('json')}
@@ -592,7 +590,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                             </div>
                           </div>
                         </button>
-                        
+
                         {/* Quick preview when collapsed */}
                         {expandedFAQ !== faq.id && (
                           <p className="text-gray-600 text-sm mt-2 line-clamp-2">
@@ -629,7 +627,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                       </div>
                     </div>
                   </div>
-                  
+
                   <AnimatePresence>
                     {expandedFAQ === faq.id && (
                       <motion.div
@@ -642,7 +640,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                           <div className="prose prose-sm max-w-none">
                             <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{faq.answer}</p>
                           </div>
-                          
+
                           <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
                             <div className="flex items-center space-x-4 text-sm text-gray-500">
                               {faq.frequency && (
@@ -698,7 +696,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
             <div className="text-sm text-gray-600">
               Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalFilteredFAQs)} of {totalFilteredFAQs} FAQs
             </div>
-            
+
             {/* Pagination Buttons */}
             <div className="flex items-center space-x-2">
               <button
@@ -708,7 +706,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               >
                 First
               </button>
-              
+
               <button
                 onClick={() => setCurrentPage(currentPage - 1)}
                 disabled={currentPage === 1}
@@ -716,7 +714,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               >
                 Previous
               </button>
-              
+
               {/* Page Numbers */}
               <div className="flex items-center space-x-1">
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -730,7 +728,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                   } else {
                     pageNum = currentPage - 2 + i;
                   }
-                  
+
                   return (
                     <button
                       key={pageNum}
@@ -746,7 +744,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                   );
                 })}
               </div>
-              
+
               <button
                 onClick={() => setCurrentPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
@@ -754,7 +752,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
               >
                 Next
               </button>
-              
+
               <button
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={currentPage === totalPages}
@@ -843,7 +841,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                         Found {selectedFAQSources.sources.length} email{selectedFAQSources.sources.length !== 1 ? 's' : ''}
                       </h4>
                     </div>
-                    
+
                     {selectedFAQSources.sources.map((source, index) => (
                       <motion.div
                         key={index}
@@ -886,7 +884,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                             <span>{new Date(source.questionCreatedAt || source.created_at || source.receivedAt).toLocaleDateString()}</span>
                           </div>
                         </div>
-                        
+
                         {(source.questionText || source.question_text) && (
                           <div className="mt-3 p-3 bg-white rounded border border-gray-200">
                             <h6 className="text-xs font-medium text-gray-700 mb-2 uppercase tracking-wide">
@@ -897,7 +895,7 @@ const FAQDisplay = ({ faqs, connectedAccounts, onRefreshFAQs, onBackToProcessing
                             </p>
                           </div>
                         )}
-                        
+
                         {source.emailBodyText && (
                           <div className="mt-3 p-3 bg-white rounded border border-gray-200">
                             <h6 className="text-xs font-medium text-gray-700 mb-2 uppercase tracking-wide">
