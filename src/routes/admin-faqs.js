@@ -21,7 +21,7 @@ router.get('/faqs', requireAuth, async (req, res) => {
     } = req.query;
 
     const offset = (page - 1) * limit;
-    
+
     // Build query conditions
     let whereConditions = ['1=1'];
     let queryParams = [];
@@ -61,7 +61,7 @@ router.get('/faqs', requireAuth, async (req, res) => {
       FROM faq_groups
       WHERE ${whereClause}
     `;
-    
+
     const countResult = await db.query(countQuery, queryParams);
     const total = parseInt(countResult.rows[0].total);
 
@@ -89,7 +89,7 @@ router.get('/faqs', requireAuth, async (req, res) => {
       ORDER BY sort_order ASC, created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    
+
     queryParams.push(limit, offset);
     const faqsResult = await db.query(faqsQuery, queryParams);
 
@@ -182,7 +182,7 @@ router.put('/faqs/reorder', requireAuth, [
 ], async (req, res) => {
   try {
     console.log('🔧 Reorder endpoint called with:', req.body);
-    
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -198,7 +198,7 @@ router.put('/faqs/reorder', requireAuth, [
     for (let i = 0; i < faqs.length; i++) {
       const faq = faqs[i];
       console.log(`Updating FAQ ${faq.id} to sort_order ${faq.sort_order}`);
-      
+
       await db.query(
         'UPDATE faq_groups SET sort_order = $1 WHERE id = $2',
         [faq.sort_order, faq.id]
@@ -250,7 +250,7 @@ router.put('/faqs/:id', requireAuth, [
 
     // Check if FAQ exists in faq_groups
     let result = await db.query('SELECT * FROM faq_groups WHERE id = $1', [id]);
-    
+
     if (result.rows.length > 0) {
       // Update faq_groups
       const updateFields = [];
@@ -321,30 +321,57 @@ router.put('/faqs/:id', requireAuth, [
  */
 router.delete('/faqs/:id', requireAuth, async (req, res) => {
   try {
+    console.log('Deleting FAQ with ID:', req.params.id);
     const { id } = req.params;
 
-    // Delete from faq_groups
-    let result = await db.query('DELETE FROM faq_groups WHERE id = $1 RETURNING *', [id]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'FAQ not found'
-      });
-    }
+    // Start a transaction to ensure data consistency
+    await db.query('BEGIN');
 
-    res.json({
-      success: true,
-      message: 'FAQ deleted successfully'
-    });
+    try {
+      // First, delete related question_groups records
+      const deleteQuestionGroupsResult = await db.query(
+        'DELETE FROM question_groups WHERE group_id = $1 RETURNING *',
+        [id]
+      );
+      console.log(`Deleted ${deleteQuestionGroupsResult.rows.length} question_groups records`);
+
+      // Then delete from faq_groups
+      const deleteFaqGroupsResult = await db.query(
+        'DELETE FROM faq_groups WHERE id = $1 RETURNING *',
+        [id]
+      );
+
+      if (deleteFaqGroupsResult.rows.length === 0) {
+        await db.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          message: 'FAQ not found'
+        });
+      }
+
+      // Commit the transaction
+      await db.query('COMMIT');
+
+      res.json({
+        success: true,
+        message: 'FAQ deleted successfully',
+        deletedQuestionGroups: deleteQuestionGroupsResult.rows.length
+      });
+
+    } catch (error) {
+      // Rollback on any error
+      await db.query('ROLLBACK');
+      throw error;
+    }
 
   } catch (error) {
     logger.error('Delete FAQ error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to delete FAQ'
+      message: 'Failed to delete FAQ',
+      error: error.message
     });
   }
 });
 
-module.exports = router; 
+module.exports = router;
