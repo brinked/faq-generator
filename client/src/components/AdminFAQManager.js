@@ -47,12 +47,12 @@ const AdminFAQManager = ({ onBack }) => {
         sort_order: index + 1
       }));
       setFaqs(updatedFAQs);
-      
+
       // Debounce the API call
       if (window.reorderTimeout) {
         clearTimeout(window.reorderTimeout);
       }
-      
+
       window.reorderTimeout = setTimeout(async () => {
         try {
           setSaving(true);
@@ -126,7 +126,7 @@ const AdminFAQManager = ({ onBack }) => {
       const response = await apiService.delete(`/api/admin/faqs/${faqId}`);
       if (response.success) {
         toast.success('FAQ deleted successfully');
-        fetchFAQs();
+        await fetchFAQs();
       }
     } catch (error) {
       console.error('Error deleting FAQ:', error);
@@ -164,15 +164,15 @@ const AdminFAQManager = ({ onBack }) => {
       faq.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       faq.question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       faq.answer?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesCategory = selectedCategory === 'all' || faq.category === selectedCategory;
-    
+
     return matchesSearch && matchesCategory;
   });
 
   useEffect(() => {
     fetchFAQs();
-    
+
     // Cleanup timeout on unmount
     return () => {
       if (window.reorderTimeout) {
@@ -298,17 +298,17 @@ const AdminFAQManager = ({ onBack }) => {
                           )}
                         </div>
                       </div>
-                      
+
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         {faq.title || faq.question}
                       </h3>
-                      
+
                       <div className="text-gray-600 mb-3">
                         <p className="mb-2"><strong>Q:</strong> {faq.question}</p>
                         <p><strong>A:</strong> {faq.answer}</p>
                         {faq.question_count && (
                           <p className="text-sm text-gray-500 mt-2">
-                            Questions in group: {faq.question_count} | 
+                            Questions in group: {faq.question_count} |
                             Confidence: {faq.avg_confidence ? (faq.avg_confidence * 100).toFixed(1) + '%' : 'N/A'}
                           </p>
                         )}
@@ -336,14 +336,14 @@ const AdminFAQManager = ({ onBack }) => {
                       >
                         {faq.is_published ? 'Unpublish' : 'Publish'}
                       </button>
-                      
+
                       <button
                         onClick={() => setEditingFAQ(faq)}
                         className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 transition-colors"
                       >
                         Edit
                       </button>
-                      
+
                       <button
                         onClick={() => handleDeleteFAQ(faq.id)}
                         className="px-3 py-1 text-sm bg-red-100 text-red-800 rounded-md hover:bg-red-200 transition-colors"
@@ -383,7 +383,7 @@ const AdminFAQManager = ({ onBack }) => {
               <div className="p-6 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">Add New FAQ</h2>
               </div>
-              
+
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
@@ -395,7 +395,7 @@ const AdminFAQManager = ({ onBack }) => {
                     placeholder="FAQ Title"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Question</label>
                   <textarea
@@ -406,7 +406,7 @@ const AdminFAQManager = ({ onBack }) => {
                     placeholder="Enter the question"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Answer</label>
                   <textarea
@@ -417,7 +417,7 @@ const AdminFAQManager = ({ onBack }) => {
                     placeholder="Enter the answer"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                   <input
@@ -429,7 +429,7 @@ const AdminFAQManager = ({ onBack }) => {
                   />
                 </div>
               </div>
-              
+
               <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
                 <button
                   onClick={() => setShowAddModal(false)}
@@ -468,7 +468,7 @@ const AdminFAQManager = ({ onBack }) => {
               <div className="p-6 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">Edit FAQ</h2>
               </div>
-              
+
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
@@ -480,7 +480,7 @@ const AdminFAQManager = ({ onBack }) => {
                     placeholder="FAQ Title"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Question</label>
                   <textarea
@@ -491,7 +491,7 @@ const AdminFAQManager = ({ onBack }) => {
                     placeholder="Enter the question"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Answer</label>
                   <textarea
@@ -502,7 +502,7 @@ const AdminFAQManager = ({ onBack }) => {
                     placeholder="Enter the answer"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                   <input
@@ -514,7 +514,7 @@ const AdminFAQManager = ({ onBack }) => {
                   />
                 </div>
               </div>
-              
+
               <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
                 <button
                   onClick={() => setEditingFAQ(null)}
@@ -538,4 +538,4 @@ const AdminFAQManager = ({ onBack }) => {
   );
 };
 
-export default AdminFAQManager; 
+export default AdminFAQManager;
