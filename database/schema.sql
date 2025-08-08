@@ -75,7 +75,7 @@ CREATE TABLE public.question_groups (question_id UUID NOT NULL, group_id UUID NO
 CREATE TABLE public.questions (id UUID NOT NULL DEFAULT uuid_generate_v4(), email_id UUID NOT NULL, question_text TEXT NOT NULL, answer_text TEXT, context_before TEXT, context_after TEXT, confidence_score DOUBLE PRECISION, position_in_email INTEGER, embedding vector, is_customer_question BOOLEAN DEFAULT true, language VARCHAR(10) DEFAULT 'en'::character varying, created_at TIMESTAMP WITH TIME ZONE DEFAULT now(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), sender_email VARCHAR(255), sender_name VARCHAR(255), email_subject TEXT, embedding_vector TEXT, confidence NUMERIC(3,2) DEFAULT 0.5, category VARCHAR(100) DEFAULT 'general'::character varying, detected_at TIMESTAMP WITH TIME ZONE DEFAULT now(), metadata JSONB);
 
 -- Table: system_metrics
-CREATE TABLE public.system_metrics (id UUID NOT NULL DEFAULT uuid_generate_v4(), metric_name VARCHAR(100) NOT NULL, metadata JSONB, created_at TIMESTAMP WITH TIME ZONE DEFAULT now());
+CREATE TABLE public.system_metrics (id UUID NOT NULL DEFAULT uuid_generate_v4(), metric_name VARCHAR(100) NOT NULL, metric_value DOUBLE PRECISION, metadata JSONB, created_at TIMESTAMP WITH TIME ZONE DEFAULT now());
 
 -- Table: system_settings
 CREATE TABLE public.system_settings (key VARCHAR(100) NOT NULL, value JSONB NOT NULL, description TEXT, updated_at TIMESTAMP WITH TIME ZONE DEFAULT now());
