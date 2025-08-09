@@ -38,6 +38,9 @@ const healthMonitor = require('./src/services/healthMonitor');
 const app = express();
 const server = http.createServer(app);
 
+// Behind a proxy on Render – ensure correct client IP for rate limiting
+app.set('trust proxy', 1);
+
 // Dynamic CORS origin configuration
 const baseUrl = process.env.BASE_URL || "http://localhost:3000";
 const corsOrigin = process.env.CORS_ORIGIN || baseUrl;
@@ -78,7 +81,7 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting - exclude health check endpoint
+// Rate limiting - exclude health check endpoints
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
@@ -86,8 +89,9 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health check endpoint
-    return req.path === '/api/health';
+    // Skip rate limiting for health check endpoints (handle variants)
+    const p = req.path || '';
+    return p === '/api/health' || p.startsWith('/api/health') || p === '/health';
   }
 });
 app.use('/api/', limiter);
@@ -119,6 +123,12 @@ app.use((req, res, next) => {
 });
 
 // API Routes - IMPORTANT: These must be defined before static file serving
+
+// Lightweight health endpoint for platform health checks
+app.get('/health', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.status(200).send('OK');
+});
 
 // Public routes (no authentication required)
 app.use('/api/public', publicFaqRoutes);
