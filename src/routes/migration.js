@@ -40,10 +40,17 @@ router.post('/run', async (req, res) => {
           message: 'Added missing columns to emails table'
         });
       } else {
+        // Fallback: ensure processed_for_faq and processed_at columns exist
+        await db.query(`
+          ALTER TABLE IF EXISTS public.emails
+          ADD COLUMN IF NOT EXISTS processed_for_faq BOOLEAN NOT NULL DEFAULT false,
+          ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ NULL,
+          ADD COLUMN IF NOT EXISTS processing_error TEXT NULL
+        `);
         results.push({
           migration: 'add_processed_for_faq_column.sql',
-          status: 'skipped',
-          message: 'Migration file not found'
+          status: 'fallback',
+          message: 'Applied fallback to add processed_for_faq, processed_at, processing_error columns'
         });
       }
     } catch (error) {
@@ -94,6 +101,43 @@ router.post('/run', async (req, res) => {
           migration: 'add_faq_group_stats_function.sql',
           status: 'success',
           message: 'Added FAQ group stats function'
+        });
+      } else {
+        // Fallback: create the function inline
+        const inlineSQL = `
+          DROP FUNCTION IF EXISTS public.update_faq_group_stats(uuid);
+          CREATE OR REPLACE FUNCTION public.update_faq_group_stats(group_uuid uuid)
+          RETURNS void
+          LANGUAGE plpgsql
+          AS $$
+          BEGIN
+            UPDATE public.faq_groups
+            SET
+              question_count = (
+                SELECT COUNT(*) FROM public.question_groups WHERE group_id = group_uuid
+              ),
+              avg_confidence = (
+                SELECT AVG(q.confidence_score)
+                FROM public.questions q
+                JOIN public.question_groups qg ON q.id = qg.question_id
+                WHERE qg.group_id = group_uuid
+              ),
+              frequency_score = (
+                SELECT COUNT(*) * COALESCE(AVG(q.confidence_score), 0)
+                FROM public.questions q
+                JOIN public.question_groups qg ON q.id = qg.question_id
+                WHERE qg.group_id = group_uuid
+              ),
+              updated_at = NOW()
+            WHERE id = group_uuid;
+          END;
+          $$;
+        `;
+        await db.query(inlineSQL);
+        results.push({
+          migration: 'add_faq_group_stats_function.sql',
+          status: 'fallback',
+          message: 'Created update_faq_group_stats function via inline SQL'
         });
       }
     } catch (error) {

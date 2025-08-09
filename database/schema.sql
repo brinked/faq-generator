@@ -51,6 +51,8 @@ CREATE TABLE public.emails (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     -- FAQ Generation columns (ADDED)
     processed_for_faq BOOLEAN NOT NULL DEFAULT false,
+    processed_at TIMESTAMP WITH TIME ZONE,
+    processing_error TEXT,
     direction VARCHAR(20) DEFAULT 'inbound',
     filtering_status VARCHAR(50) DEFAULT 'pending',
     filtering_reason TEXT,
