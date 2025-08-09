@@ -557,7 +557,7 @@ router.post('/merge', async (req, res) => {
       await client.query('DELETE FROM faq_groups WHERE id = ANY($1::uuid[])', [sourceFaqIds]);
 
       // Update target FAQ statistics
-      await client.query('SELECT update_faq_group_stats($1)', [targetFaqId]);
+      await client.query('SELECT update_faq_group_stats($1::uuid)', [targetFaqId]);
     });
 
     logger.info(`Merged ${sourceFaqIds.length} FAQs into FAQ ${targetFaqId}`);

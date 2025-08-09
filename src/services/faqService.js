@@ -749,7 +749,7 @@ class FAQService {
       
       for (const row of result.rows) {
         await db.query(
-          'SELECT update_faq_group_stats($1)',
+          'SELECT update_faq_group_stats($1::uuid)',
           [row.id]
         );
       }
