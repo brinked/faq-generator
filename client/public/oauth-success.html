@@ -97,6 +97,7 @@
   const provider = urlParams.get('provider');
   const email = urlParams.get('email');
   const message = urlParams.get('message');
+  const accountId = urlParams.get('accountId');
 
   const titleEl = document.getElementById('title');
   const messageEl = document.getElementById('message');
@@ -130,6 +131,7 @@
             success: success === 'true',
             provider,
             email,
+            account: accountId || null,
             error: error || null
           }, '*');
         } catch (e) {

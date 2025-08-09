@@ -32,28 +32,52 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
 
       console.log(`OAuth popup opened:`, popup ? 'success' : 'failed');
 
+      // Helper: poll for new account after OAuth completes
+      const pollForNewAccount = async ({ expectedProvider, expectedEmail = null, expectedAccountId = null, maxAttempts = 10, delayMs = 1000 }) => {
+        let attempts = 0;
+        const initialIds = new Set((connectedAccounts || []).map(acc => acc.id));
+        while (attempts < maxAttempts) {
+          try {
+            const accounts = await apiService.getConnectedAccounts();
+            // Prefer matching by accountId if provided
+            let match = null;
+            if (expectedAccountId) {
+              match = accounts.find(acc => acc.id === expectedAccountId);
+            }
+            if (!match) {
+              match = accounts.find(acc => {
+                const isNew = !initialIds.has(acc.id);
+                const providerMatch = acc.provider === expectedProvider;
+                const emailMatch = expectedEmail ? acc.email === expectedEmail : true;
+                return isNew && providerMatch && emailMatch;
+              });
+            }
+            if (match) {
+              onAccountConnected(match);
+              return true;
+            }
+          } catch (e) {
+            // ignore and retry
+          }
+          attempts += 1;
+          await new Promise(r => setTimeout(r, delayMs));
+        }
+        return false;
+      };
+
       // Listen for OAuth callback
       const checkClosed = setInterval(() => {
         if (popup.closed) {
           clearInterval(checkClosed);
           setConnecting(null);
 
-          // Check if account was successfully connected
-          setTimeout(async () => {
-            try {
-              const accounts = await apiService.getConnectedAccounts();
-              const newAccount = accounts.find(acc =>
-                acc.provider === provider &&
-                !connectedAccounts.find(existing => existing.id === acc.id)
-              );
-
-              if (newAccount) {
-                onAccountConnected(newAccount);
-              }
-            } catch (error) {
-              console.error('Failed to check connected accounts:', error);
+          // After popup closes, poll a few times to detect the newly added account
+          // This handles timing where DB update may lag the UI
+          pollForNewAccount({ expectedProvider: provider }).then(found => {
+            if (!found) {
+              console.warn('OAuth account not detected after polling');
             }
-          }, 1000);
+          });
         }
       }, 1000);
 
@@ -61,12 +85,12 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
       const handleMessage = (event) => {
         console.log('Received message:', event.data, 'from origin:', event.origin);
 
-        if (event.origin !== window.location.origin) {
-          console.log('Ignoring message from different origin');
-          return;
-        }
+        // Accept messages regardless of exact origin to avoid cross-origin issues in deployments
+        if (!event.data || !event.data.type) return;
 
-        if (event.data.type === 'OAUTH_SUCCESS') {
+        const type = String(event.data.type).toLowerCase();
+
+        if (type === 'oauth_complete' || type === 'oauth_success') {
           console.log('OAuth success message received');
           if (popup && !popup.closed) {
             popup.close();
@@ -75,30 +99,19 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
           setConnecting(null);
 
           // Reload accounts to get the newly connected account
-          setTimeout(async () => {
-            try {
-              const accounts = await apiService.getConnectedAccounts();
-              const newAccount = accounts.find(acc =>
-                acc.provider === event.data.provider &&
-                !connectedAccounts.find(existing => existing.id === acc.id)
-              );
-
-              if (newAccount) {
-                onAccountConnected(newAccount);
-              } else if (event.data.account) {
-                // If we have the account ID, find it in the accounts list
-                const allAccounts = await apiService.getConnectedAccounts();
-                const connectedAccount = allAccounts.find(acc => acc.id === event.data.account);
-                if (connectedAccount) {
-                  onAccountConnected(connectedAccount);
-                }
+          const expectedProvider = event.data.provider || provider;
+          const expectedEmail = event.data.email || null;
+          const expectedAccountId = event.data.account || null;
+          pollForNewAccount({ expectedProvider, expectedEmail, expectedAccountId })
+            .then(found => {
+              if (!found) {
+                console.warn('OAuth account not detected after message polling');
               }
-            } catch (error) {
-              console.error('Failed to check connected accounts:', error);
+            })
+            .catch(() => {
               toast.error('Account connected but failed to load details');
-            }
-          }, 500);
-        } else if (event.data.type === 'OAUTH_ERROR') {
+            });
+        } else if (type === 'oauth_error') {
           console.log('OAuth error message received:', event.data);
           if (popup && !popup.closed) {
             popup.close();
