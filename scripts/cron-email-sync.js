@@ -23,7 +23,7 @@ async function runEmailSync() {
     
     // Configuration from environment variables
     const config = {
-      maxEmails: parseInt(process.env.CRON_SYNC_MAX_EMAILS) || 500,
+      maxEmails: parseInt(process.env.MAX_EMAILS_PER_SYNC) || 1000,
       skipRecentlyProcessed: true,
       timeout: parseInt(process.env.CRON_TIMEOUT_MS) || 10 * 60 * 1000 // 10 minutes
     };

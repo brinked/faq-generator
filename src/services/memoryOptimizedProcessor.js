@@ -66,7 +66,7 @@ class MemoryOptimizedProcessor {
   }
 
   /**
-   * Process a single email with comprehensive error handling and memory management
+   * Process a single email safely with timeout and error handling
    */
   async processEmailSafely(email, batchIndex, emailIndex) {
     const emailId = email.id;
@@ -82,7 +82,27 @@ class MemoryOptimizedProcessor {
       );
       
       if (existingQuestions.rows[0].count > 0) {
-        logger.info(`✅ Email ${emailId} already processed, skipping`);
+        logger.info(`✅ Email ${emailId} already processed, marking as processed`);
+        
+        // Mark email as processed since questions already exist
+        try {
+          await db.query(
+            'UPDATE emails SET is_processed = true, processed_for_faq = true WHERE id = $1',
+            [emailId]
+          );
+        } catch (updateError) {
+          if (updateError.message.includes('column') && updateError.message.includes('does not exist')) {
+            logger.warn('Missing database columns, skipping processed_for_faq update');
+            // Try alternative update without the missing columns
+            await db.query(
+              'UPDATE emails SET updated_at = NOW() WHERE id = $1',
+              [emailId]
+            );
+          } else {
+            throw updateError;
+          }
+        }
+        
         this.stats.processed++;
         return { emailId, status: 'skipped', reason: 'already_processed' };
       }
@@ -102,13 +122,11 @@ class MemoryOptimizedProcessor {
       };
       
       // Process with timeout
-      const processingPromise = this.aiService.detectQuestions(
+      const result = await Promise.race([this.aiService.detectQuestions(
         limitedEmail.body_text,
         limitedEmail.subject,
         [] // No thread context to reduce memory usage
-      );
-      
-      const result = await Promise.race([processingPromise, timeoutPromise]);
+      ), timeoutPromise]);
       
       // Store questions if found
       if (result.hasQuestions && result.questions.length > 0) {
@@ -119,7 +137,7 @@ class MemoryOptimizedProcessor {
       // Mark email as processed (with column check)
       try {
         await db.query(
-          'UPDATE emails SET is_processed = true, processed_for_faq = true, processed_at = NOW() WHERE id = $1',
+          'UPDATE emails SET is_processed = true, processed_for_faq = true WHERE id = $1',
           [emailId]
         );
       } catch (updateError) {
@@ -165,7 +183,6 @@ class MemoryOptimizedProcessor {
           `UPDATE emails
            SET is_processed = true,
                processed_for_faq = true,
-               processed_at = NOW(),
                processing_error = $2
            WHERE id = $1`,
           [emailId, error.message]
@@ -262,87 +279,136 @@ class MemoryOptimizedProcessor {
   }
 
   /**
-   * Process emails in memory-optimized batches
+   * Process emails with memory optimization and real-time progress
    */
   async processEmails(emails, io = null) {
-    logger.info(`🚀 Starting memory-optimized processing of ${emails.length} emails`);
-    
-    this.stats.startTime = new Date();
-    const processedEmails = [];
-    const totalBatches = Math.ceil(emails.length / this.maxBatchSize);
-    
     try {
-      // Process in small batches
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-        const batchStart = batchIndex * this.maxBatchSize;
-        const batchEnd = Math.min(batchStart + this.maxBatchSize, emails.length);
-        const emailBatch = emails.slice(batchStart, batchEnd);
+      logger.info(`🚀 Starting memory-optimized processing of ${emails.length} emails`);
+      
+      // Emit start event
+      if (io) {
+        io.emit('faq_processing_progress', {
+          type: 'start',
+          total: emails.length,
+          processed: 0,
+          message: `Starting processing of ${emails.length} emails...`
+        });
+      }
+      
+      this.stats = {
+        total: emails.length,
+        processed: 0,
+        questionsFound: 0,
+        errors: 0,
+        totalErrors: 0,
+        consecutiveErrors: 0
+      };
+      
+      const batchSize = this.maxBatchSize;
+      const results = [];
+      
+      for (let batchIndex = 0; batchIndex < emails.length; batchIndex += batchSize) {
+        const batch = emails.slice(batchIndex, batchIndex + batchSize);
+        logger.info(`📦 Processing batch ${Math.floor(batchIndex / batchSize) + 1}/${Math.ceil(emails.length / batchSize)} (${batch.length} emails)`);
         
-        logger.info(`📦 Processing batch ${batchIndex + 1}/${totalBatches} (${emailBatch.length} emails)`);
+        // Emit batch start event
+        if (io) {
+          io.emit('faq_processing_progress', {
+            type: 'batch_start',
+            batchIndex: Math.floor(batchIndex / batchSize) + 1,
+            totalBatches: Math.ceil(emails.length / batchSize),
+            batchSize: batch.length,
+            message: `Processing batch ${Math.floor(batchIndex / batchSize) + 1}/${Math.ceil(emails.length / batchSize)}`
+          });
+        }
         
-        // Process emails in batch sequentially
-        for (let emailIndex = 0; emailIndex < emailBatch.length; emailIndex++) {
-          const email = emailBatch[emailIndex];
-          const result = await this.processEmailSafely(email, batchIndex, emailIndex);
-          processedEmails.push(result);
-          
-          // Emit progress update with correct field names for frontend
-          if (io) {
-            io.emit('faq_processing_progress', {
-              current: this.stats.processed,  // Changed from 'processed'
-              total: emails.length,
-              questions: this.stats.questionsFound,  // Changed from 'questionsFound'
-              errors: this.stats.errors,
-              currentEmail: email.subject || 'Processing...',
-              currentBatch: batchIndex + 1,
-              totalBatches
-            });
+        const batchPromises = batch.map((email, emailIndex) => 
+          this.processEmailSafely(email, batchIndex, emailIndex)
+        );
+        
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Process batch results
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            results.push(result.value);
+            
+            // Update global stats for each processed email
+            if (result.value.status === 'success' || result.value.status === 'skipped') {
+              this.stats.processed = Math.min(this.stats.processed + 1, emails.length);
+              if (result.value.questionsFound) {
+                this.stats.questionsFound += result.value.questionsFound;
+              }
+            }
+            
+            // Emit individual email progress with updated counts
+            if (io && (result.value.status === 'success' || result.value.status === 'skipped')) {
+              io.emit('faq_processing_progress', {
+                type: 'email_processed',
+                emailId: result.value.emailId,
+                questionsFound: result.value.questionsFound || 0,
+                current: this.stats.processed,
+                total: emails.length,
+                percentage: Math.round((this.stats.processed / emails.length) * 100),
+                message: `Processed email: ${result.value.questionsFound || 0} questions found`
+              });
+            }
+          } else {
+            logger.error('Batch processing error:', result.reason);
+            this.stats.errors++;
+            this.totalErrors++;
           }
         }
         
-        // Memory management between batches
-        await this.checkMemoryUsage();
+        // Emit batch complete event
+        if (io) {
+          io.emit('faq_processing_progress', {
+            type: 'batch_complete',
+            batchIndex: Math.floor(batchIndex / batchSize) + 1,
+            totalBatches: Math.ceil(emails.length / batchSize),
+            processed: Math.min(batchIndex + batchSize, emails.length),
+            total: emails.length,
+            message: `Completed batch ${Math.floor(batchIndex / batchSize) + 1}/${Math.ceil(emails.length / batchSize)}`
+          });
+        }
         
-        // Force GC every N batches
-        if ((batchIndex + 1) % this.gcInterval === 0 && global.gc) {
-          logger.info('🧹 Scheduled garbage collection');
+        // Memory cleanup between batches
+        if (global.gc) {
           global.gc();
-          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        // Small delay between batches
+        if (batchIndex + batchSize < emails.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
       
-      // Final statistics
-      const processingTime = new Date() - this.stats.startTime;
-      const summary = {
-        totalEmails: emails.length,
-        processed: this.stats.processed,
-        questionsFound: this.stats.questionsFound,
-        errors: this.stats.errors,
-        processingTimeMs: processingTime,
-        processingTimeSec: Math.round(processingTime / 1000),
-        avgTimePerEmail: Math.round(processingTime / emails.length),
-        memoryPeaks: this.stats.memoryPeaks.slice(-5), // Last 5 peaks
-        success: this.stats.errors === 0
-      };
-      
-      logger.info('✅ Processing complete:', summary);
-      
       // Emit completion event
       if (io) {
-        io.emit('faq_processing_complete', summary);
+        io.emit('faq_processing_complete', {
+          total: emails.length,
+          processed: this.stats.processed,
+          questionsFound: this.stats.questionsFound,
+          errors: this.stats.errors,
+          message: `Processing completed: ${this.stats.processed} emails processed, ${this.stats.questionsFound} questions found`
+        });
       }
       
-      return summary;
+      logger.info(`✅ Memory-optimized processing completed`, this.stats);
+      return {
+        success: true,
+        ...this.stats,
+        results
+      };
       
     } catch (error) {
-      logger.error('❌ Fatal error during batch processing:', error);
+      logger.error('❌ Memory-optimized processing failed:', error);
       
       // Emit error event
       if (io) {
         io.emit('faq_processing_error', {
           error: error.message,
-          processed: this.stats.processed,
-          errors: this.stats.errors
+          message: 'Processing failed: ' + error.message
         });
       }
       

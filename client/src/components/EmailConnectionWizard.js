@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { apiService } from '../services/apiService';
@@ -7,6 +7,157 @@ import { ButtonSpinner } from './LoadingSpinner';
 const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccountDisconnected }) => {
   const [connecting, setConnecting] = useState(null);
   const [showConfirmDisconnect, setShowConfirmDisconnect] = useState(null);
+  const [processingStatus, setProcessingStatus] = useState(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [fetchMoreStates, setFetchMoreStates] = useState({});
+  const [pageTokens, setPageTokens] = useState({});
+
+  // Poll for processing status when there are connected accounts
+  useEffect(() => {
+    if (connectedAccounts.length === 0) return;
+
+    let pollingInterval;
+    
+    const startPolling = () => {
+      setIsPolling(true);
+      pollingInterval = setInterval(async () => {
+        try {
+          const status = await apiService.getProcessingStatus();
+          setProcessingStatus(status);
+          
+          // Stop polling if no active jobs
+          const hasActiveJobs = status.accounts?.some(acc => 
+            acc.current_job && acc.current_job.status === 'processing'
+          );
+          
+          if (!hasActiveJobs) {
+            setIsPolling(false);
+            clearInterval(pollingInterval);
+          }
+        } catch (error) {
+          console.error('Failed to poll processing status:', error);
+        }
+      }, 2000);
+    };
+
+    const stopPolling = () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setIsPolling(false);
+      }
+    };
+
+    // Check if there are any active processing jobs
+    if (processingStatus?.accounts) {
+      const hasActiveJobs = processingStatus.accounts.some(acc => 
+        acc.current_job && acc.current_job.status === 'processing'
+      );
+      
+      if (hasActiveJobs && !isPolling) {
+        startPolling();
+      } else if (!hasActiveJobs && isPolling) {
+        stopPolling();
+      }
+    }
+
+    return () => {
+      stopPolling();
+    };
+  }, [connectedAccounts, processingStatus, isPolling]);
+
+  // Load initial processing status
+  useEffect(() => {
+    if (connectedAccounts.length > 0) {
+      const loadStatus = async () => {
+        try {
+          const status = await apiService.getProcessingStatus();
+          setProcessingStatus(status);
+        } catch (error) {
+          console.error('Failed to load processing status:', error);
+        }
+      };
+      loadStatus();
+    }
+  }, [connectedAccounts]);
+
+  // Handle fetch more emails for a specific account
+  const handleFetchMore = async (accountId, accountEmail) => {
+    try {
+      const currentState = fetchMoreStates[accountId] || {};
+      if (currentState.fetching) return; // Prevent multiple requests
+
+      setFetchMoreStates(prev => ({
+        ...prev,
+        [accountId]: { ...currentState, fetching: true }
+      }));
+
+      toast.info(`Fetching more emails for ${accountEmail}...`);
+
+      const result = await apiService.fetchMoreEmails(accountId, {
+        maxEmails: 100, // Fetch in smaller chunks of 100 emails
+        pageToken: pageTokens[accountId] || null
+      });
+
+      if (result.success) {
+        const { hasMore, nextPageToken, message, synced } = result.result;
+        
+        // Update page token for next fetch
+        if (nextPageToken) {
+          setPageTokens(prev => ({
+            ...prev,
+            [accountId]: nextPageToken
+          }));
+        }
+
+        // Update fetch more state
+        setFetchMoreStates(prev => ({
+          ...prev,
+          [accountId]: {
+            ...currentState,
+            fetching: false,
+            hasMore,
+            lastFetchCount: synced,
+            lastMessage: message
+          }
+        }));
+
+        if (synced > 0) {
+          toast.success(`Fetched ${synced} more emails from ${accountEmail}`);
+        } else {
+          toast.info(message || 'No more emails to fetch');
+        }
+
+        // Refresh the processing status to show updated counts
+        if (typeof onSyncEmails === 'function') {
+          // Trigger a refresh of the status
+          setTimeout(() => {
+            window.location.reload(); // Simple refresh for now
+          }, 2000);
+        }
+      } else {
+        // Handle API error response
+        toast.error(`Failed to fetch more emails: ${result.message || 'Unknown error'}`);
+        
+        setFetchMoreStates(prev => ({
+          ...prev,
+          [accountId]: { ...prev[accountId], fetching: false }
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch more emails:', error);
+      toast.error(`Failed to fetch more emails: ${error.message || 'Network error'}`);
+      
+      // Always reset fetching state on error
+      setFetchMoreStates(prev => ({
+        ...prev,
+        [accountId]: { 
+          ...prev[accountId], 
+          fetching: false,
+          lastMessage: 'Failed to fetch emails'
+        }
+      }));
+    }
+  };
 
   const handleConnectEmail = async (provider) => {
     setConnecting(provider);
@@ -230,6 +381,150 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
               </motion.div>
             ))}
           </div>
+        </motion.div>
+      )}
+
+      {/* Email Processing Progress */}
+      {processingStatus?.accounts && processingStatus.accounts.some(acc => 
+        acc.current_job && acc.current_job.status === 'processing'
+      ) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="card mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200"
+        >
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900">Email Processing in Progress</h3>
+              <p className="text-sm text-blue-700">Your emails are being fetched and analyzed</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {processingStatus.accounts
+              .filter(acc => acc.current_job && acc.current_job.status === 'processing')
+              .map((account) => (
+                <div key={account.id} className="bg-white rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-2">
+                      <div className={`${getProviderColor(account.provider)}`}>
+                        {getProviderIcon(account.provider)}
+                      </div>
+                      <span className="font-medium text-gray-900">{account.email_address}</span>
+                    </div>
+                    <span className="text-sm font-medium text-blue-600">
+                      {account.current_job.progress}%
+                    </span>
+                  </div>
+                  
+                  {/* Progress Bar */}
+                  <div className="w-full bg-blue-200 rounded-full h-2 mb-3">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${account.current_job.progress}%` }}
+                      transition={{ duration: 0.5 }}
+                      className="bg-blue-600 h-2 rounded-full"
+                    />
+                  </div>
+                  
+                  {/* Progress Details */}
+                  <div className="flex justify-between text-sm text-blue-700">
+                    <span>
+                      {account.current_job.processed_items} of {account.current_job.total_items} emails processed
+                    </span>
+                    <span>
+                      Started {new Date(account.current_job.started_at).toLocaleTimeString()}
+                    </span>
+                  </div>
+
+                  {/* Email Counts */}
+                  {account.email_stats && (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-lg font-semibold text-gray-900">
+                            {account.email_stats.total}
+                          </div>
+                          <div className="text-xs text-gray-500">Total Emails</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-semibold text-green-600">
+                            {account.email_stats.processed}
+                          </div>
+                          <div className="text-xs text-gray-500">Processed</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-semibold text-orange-600">
+                            {account.email_stats.pending}
+                          </div>
+                          <div className="text-xs text-gray-500">Pending</div>
+                        </div>
+                      </div>
+                    
+                      {/* Fetch More Button */}
+                      <div className="mt-4 pt-3 border-t border-blue-200">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm text-blue-700">
+                            {fetchMoreStates[account.id]?.lastMessage || 'Ready to fetch more emails'}
+                          </div>
+                          <button
+                            onClick={() => handleFetchMore(account.id, account.email_address)}
+                            disabled={fetchMoreStates[account.id]?.fetching}
+                            className="btn-primary px-3 py-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {fetchMoreStates[account.id]?.fetching ? (
+                              <>
+                                <ButtonSpinner />
+                                <span className="ml-1">Fetching...</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Fetch More
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        
+                        {/* Fetch More Progress */}
+                        {fetchMoreStates[account.id]?.fetching && (
+                          <div className="mt-2">
+                            <div className="flex items-center space-x-2 text-xs text-blue-600">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                              <span>Fetching more emails from {account.provider}...</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Last Fetch Result */}
+                        {fetchMoreStates[account.id]?.lastFetchCount && (
+                          <div className="mt-2 text-xs text-green-600">
+                            +{fetchMoreStates[account.id].lastFetchCount} emails fetched
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+          </div>
+
+          {isPolling && (
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <div className="flex items-center space-x-2 text-sm text-blue-600">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span>Live updates enabled - refreshing every 2 seconds</span>
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
 

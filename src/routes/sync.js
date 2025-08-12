@@ -75,7 +75,7 @@ router.get('/status', async (req, res) => {
  */
 router.post('/trigger', async (req, res) => {
   try {
-    const { maxEmails = 100 } = req.body;
+    const { maxEmails = parseInt(process.env.MAX_EMAILS_PER_SYNC) || 1000 } = req.body;
     
     logger.info('Manual sync triggered via API', { maxEmails });
     
@@ -114,7 +114,7 @@ router.post('/trigger', async (req, res) => {
 router.post('/trigger/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
-    const { maxEmails = 100 } = req.body;
+    const { maxEmails = parseInt(process.env.MAX_EMAILS_PER_SYNC) || 1000 } = req.body;
     
     logger.info('Manual account sync triggered via API', { accountId, maxEmails });
     

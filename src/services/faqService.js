@@ -18,7 +18,7 @@ class FAQService {
     try {
       const {
         minQuestionCount = 1, // Reduced from 2 to be more permissive
-        maxFAQs = 10, // Reduced from 100 to prevent memory issues
+        maxFAQs = 500, // High limit - will prioritize most important clusters
         forceRegenerate = false,
         autoFix = true
       } = options;
@@ -120,11 +120,18 @@ class FAQService {
 
       let generated = 0;
       let updated = 0;
-      const totalClusters = Math.min(validClusters.length, maxFAQs);
+      // Sort clusters by importance (size, confidence, recency) before limiting
+      const sortedClusters = validClusters.sort((a, b) => {
+        // Prioritize larger clusters with higher confidence
+        const scoreA = a.questions.length * (a.avgConfidence || 0.5);
+        const scoreB = b.questions.length * (b.avgConfidence || 0.5);
+        return scoreB - scoreA;
+      });
+      const totalClusters = Math.min(sortedClusters.length, maxFAQs);
 
       // Process each cluster to create/update FAQs
       for (let i = 0; i < totalClusters; i++) {
-        const cluster = validClusters[i];
+        const cluster = sortedClusters[i];
         try {
           if (socket) {
             const clusterProgress = 60 + Math.round((i / totalClusters) * 30);

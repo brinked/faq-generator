@@ -132,6 +132,13 @@ class ApiService {
     });
   }
 
+  async fetchMoreEmails(accountId, options = {}) {
+    return this.request(`/api/accounts/${accountId}/fetch-more`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
   async syncAllEmails() {
     return this.request('/api/dashboard/sync-all', {
       method: 'POST',

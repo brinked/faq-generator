@@ -480,6 +480,37 @@ router.get('/:accountId/sync-status', async (req, res) => {
   }
 });
 
+/**
+ * Fetch more emails for an account
+ */
+router.post('/:accountId/fetch-more', async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const { maxEmails, pageToken, sinceDate } = req.body;
+    
+    logger.info('Fetch more emails requested via API', { accountId, maxEmails, pageToken: pageToken ? 'present' : 'none' });
+    
+    const result = await emailService.fetchMoreEmails(accountId, {
+      maxEmails: maxEmails || 100, // Use smaller chunks by default
+      pageToken,
+      sinceDate: sinceDate ? new Date(sinceDate) : null
+    });
+    
+    res.json({
+      success: true,
+      result,
+      message: result.message
+    });
+    
+  } catch (error) {
+    logger.error('Error fetching more emails:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch more emails'
+    });
+  }
+});
+
 // Get Gmail message count for an account
 router.get('/:accountId/gmail-count', async (req, res) => {
   try {

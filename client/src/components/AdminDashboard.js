@@ -153,6 +153,7 @@ const AdminDashboard = () => {
         // Load initial data
         await loadConnectedAccounts();
         await loadFAQs();
+        await loadProcessingStatus();
 
         setLoading(false);
       } catch (error) {
@@ -172,6 +173,47 @@ const AdminDashboard = () => {
     };
   }, [isAuthenticated]);
 
+  // Poll for processing status updates when there are active jobs
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let statusPollingInterval;
+    
+    const startStatusPolling = () => {
+      statusPollingInterval = setInterval(async () => {
+        try {
+          await loadProcessingStatus();
+        } catch (error) {
+          console.error('Failed to poll processing status:', error);
+        }
+      }, 2000); // Poll every 2 seconds when there are active jobs
+    };
+
+    const stopStatusPolling = () => {
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+        statusPollingInterval = null;
+      }
+    };
+
+    // Check if there are any active processing jobs
+    if (processingStatus?.accounts) {
+      const hasActiveJobs = processingStatus.accounts.some(acc => 
+        acc.current_job && acc.current_job.status === 'processing'
+      );
+      
+      if (hasActiveJobs && !statusPollingInterval) {
+        startStatusPolling();
+      } else if (!hasActiveJobs && statusPollingInterval) {
+        stopStatusPolling();
+      }
+    }
+
+    return () => {
+      stopStatusPolling();
+    };
+  }, [isAuthenticated, processingStatus?.accounts]); // Only depend on accounts array, not the entire status object
+
   // Load connected email accounts
   const loadConnectedAccounts = async () => {
     try {
@@ -183,6 +225,16 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Failed to load connected accounts:', error);
+    }
+  };
+
+  // Load processing status
+  const loadProcessingStatus = async () => {
+    try {
+      const status = await apiService.getProcessingStatus();
+      setProcessingStatus(status);
+    } catch (error) {
+      console.error('Failed to load processing status:', error);
     }
   };
 
@@ -234,11 +286,22 @@ const AdminDashboard = () => {
   // Handle manual email sync
   const handleSyncEmails = async () => {
     try {
+      toast.info('Starting email sync for all accounts...');
       const result = await apiService.syncAllEmails();
-      toast.success('Email sync started');
+      
+      // Immediately refresh processing status to show the new job
+      await loadProcessingStatus();
+      
+      toast.success(`Email sync started! ${result.message || 'Processing in background'}`);
+      
+      // Start polling for updates
+      if (result.success) {
+        // The polling effect will automatically start when it detects active jobs
+        console.log('Email sync initiated, monitoring progress...');
+      }
     } catch (error) {
       console.error('Failed to sync emails:', error);
-      toast.error('Failed to start email sync');
+      toast.error(`Failed to start email sync: ${error.message}`);
     }
   };
 
@@ -293,29 +356,62 @@ const AdminDashboard = () => {
           <StepIndicator steps={STEPS} currentStep={currentStep} />
         </div>
 
-        {/* Debug Info */}
-        <div className="mb-6 p-4 glass rounded-xl shadow-lg border border-white/20 text-sm text-gray-700 animate-slide-in-right">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="font-semibold text-gray-800 flex items-center">
-              <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Debug Info:
-            </span>
-            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
-              Step: {currentStep}
-            </span>
-            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
-              Accounts: {connectedAccounts.length}
-            </span>
-            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full font-medium">
-              FAQs: {faqs.length}
-            </span>
-            {processingStatus && (
-              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full font-medium">
-                Status: {processingStatus.status}
-              </span>
-            )}
+        {/* Quick Stats Dashboard */}
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in-up">
+          <div className="glass rounded-xl p-4 shadow-lg border border-white/20">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-600">Connected Accounts</p>
+                <p className="text-2xl font-bold text-gray-900">{connectedAccounts.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="glass rounded-xl p-4 shadow-lg border border-white/20">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-600">Generated FAQs</p>
+                <p className="text-2xl font-bold text-gray-900">{faqs.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="glass rounded-xl p-4 shadow-lg border border-white/20">
+            <div className="flex items-center">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-600">Current Step</p>
+                <p className="text-2xl font-bold text-gray-900">{currentStep}/4</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="glass rounded-xl p-4 shadow-lg border border-white/20">
+            <div className="flex items-center">
+              <div className={`p-2 rounded-lg ${processingStatus?.overall_stats?.active_jobs > 0 ? 'bg-orange-100' : 'bg-gray-100'}`}>
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-600">Active Jobs</p>
+                <p className="text-2xl font-bold text-gray-900">{processingStatus?.overall_stats?.active_jobs || 0}</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -346,21 +442,30 @@ const AdminDashboard = () => {
               transition={{ duration: 0.3 }}
             >
               {connectedAccounts.length > 0 ? (
-                <div className="space-y-6">
-                  <ProcessingStatus
-                    status={processingStatus}
-                    connectedAccounts={connectedAccounts}
-                    onSyncEmails={handleSyncEmails}
-                    onContinue={() => setCurrentStep(3)}
-                    canContinue={faqs.length > 0}
-                  />
-                  <FAQProcessor
-                    socket={socket}
-                    onProcessingComplete={(result) => {
-                      loadFAQs();
-                      toast.success(`Processing complete! Found ${result.questionsFound} questions and created ${result.faqGroupsCreated} FAQ groups.`);
-                    }}
-                  />
+                <div className="space-y-8">
+                  {/* Unified Processing Dashboard */}
+                  <div className="glass rounded-2xl shadow-xl border border-white/30 p-6 backdrop-blur-xl">
+                    <div className="flex items-center justify-between mb-6">
+                      <h2 className="text-2xl font-bold text-gray-900">Email Processing & FAQ Generation</h2>
+                      <button
+                        onClick={handleSyncEmails}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Sync All Emails</span>
+                      </button>
+                    </div>
+                    
+                    <FAQProcessor
+                      socket={socket}
+                      onProcessingComplete={(result) => {
+                        loadFAQs();
+                        toast.success(`Processing complete! Found ${result.questionsFound} questions and created ${result.faqGroupsCreated} FAQ groups.`);
+                      }}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="text-center p-8">

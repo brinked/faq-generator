@@ -64,7 +64,7 @@ class SchedulerService {
         
         // Sync all active accounts
         const result = await emailService.syncAllAccounts({
-          maxEmails: parseInt(process.env.SCHEDULED_SYNC_MAX_EMAILS) || 500,
+          maxEmails: parseInt(process.env.MAX_EMAILS_PER_SYNC) || 1000,
           skipRecentlyProcessed: true
         });
 

@@ -11,7 +11,7 @@ class EmailService {
   }
 
   /**
-   * Get emails for processing with safe column handling and filtering
+   * Get emails for FAQ processing with simplified filtering
    */
   async getEmailsForProcessing(limit = 100, offset = 0) {
     try {
@@ -33,23 +33,7 @@ class EmailService {
 
       let query;
       if (hasProcessedColumn) {
-        // Build query with conditional filters based on existing columns
-        let whereConditions = [
-          'e.processed_for_faq = false',
-          'e.body_text IS NOT NULL',
-          'LENGTH(e.body_text) > 50'
-        ];
-
-        // Only add direction filter if column exists
-        if (hasDirectionColumn) {
-          whereConditions.push("e.direction = 'inbound'");
-        }
-
-        // Only add filtering_status filter if column exists
-        if (hasFilteringStatusColumn) {
-          whereConditions.push("e.filtering_status = 'qualified'");
-        }
-
+        // Simplified query - just get unprocessed emails with content
         query = `
           SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
@@ -58,30 +42,17 @@ class EmailService {
             ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
-          WHERE ${whereConditions.join(' AND ')}
+          WHERE e.processed_for_faq = false 
+            AND e.body_text IS NOT NULL 
+            AND LENGTH(e.body_text) > 20
+            AND e.sender_email IS NOT NULL
           ORDER BY e.received_at DESC
           LIMIT $1 OFFSET $2
         `;
       } else {
         logger.warn('Column processed_for_faq does not exist, using fallback query');
 
-        // Build fallback query with conditional filters
-        let whereConditions = [
-          'e.body_text IS NOT NULL',
-          'LENGTH(e.body_text) > 50',
-          'NOT EXISTS (SELECT 1 FROM questions q WHERE q.email_id = e.id)'
-        ];
-
-        // Only add direction filter if column exists
-        if (hasDirectionColumn) {
-          whereConditions.push("e.direction = 'inbound'");
-        }
-
-        // Only add filtering_status filter if column exists
-        if (hasFilteringStatusColumn) {
-          whereConditions.push("e.filtering_status = 'qualified'");
-        }
-
+        // Fallback query - check if email already has questions
         query = `
           SELECT
             e.id, e.account_id, e.message_id, e.thread_id, e.subject,
@@ -90,7 +61,10 @@ class EmailService {
             ea.email_address as account_email, ea.provider
           FROM emails e
           JOIN email_accounts ea ON e.account_id = ea.id
-          WHERE ${whereConditions.join(' AND ')}
+          WHERE e.body_text IS NOT NULL 
+            AND LENGTH(e.body_text) > 20
+            AND e.sender_email IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM questions q WHERE q.email_id = e.id)
           ORDER BY e.received_at DESC
           LIMIT $1 OFFSET $2
         `;
@@ -102,24 +76,12 @@ class EmailService {
       const result = await db.query(query, [limit, offset]);
       const emails = result.rows;
 
-      logger.info(`Found ${emails.length} emails before filtering`);
+      logger.info(`Found ${emails.length} emails for processing`);
 
-      // Filter emails using the new filtering service
-      const filteredEmails = [];
-      for (const email of emails) {
-        const qualification = await this.filteringService.doesEmailQualifyForFAQ(email, connectedAccounts);
-        if (qualification.qualifies) {
-          filteredEmails.push({
-            ...email,
-            qualification
-          });
-        } else {
-          logger.debug(`Email ${email.id} disqualified: ${qualification.reason}`);
-        }
-      }
+      // Return emails directly without additional filtering for now
+      // This allows the FAQ processing to handle the content analysis
+      return emails;
 
-      logger.info(`Filtered ${filteredEmails.length} qualifying emails from ${emails.length} total`);
-      return filteredEmails;
     } catch (error) {
       logger.error('Error getting emails for processing:', error);
       throw error;
@@ -298,7 +260,20 @@ class EmailService {
         await this.saveEmails(account.id, syncResult.messages);
       }
 
-      return { synced: syncResult.processed };
+      // Store the nextPageToken for future fetch more operations
+      if (syncResult.nextPageToken) {
+        await db.query(
+          'UPDATE email_accounts SET sync_cursor = $1, updated_at = NOW() WHERE id = $2',
+          [syncResult.nextPageToken, account.id]
+        );
+        logger.info(`Stored nextPageToken for account ${account.id}: ${syncResult.nextPageToken}`);
+      }
+
+      return { 
+        synced: syncResult.processed,
+        nextPageToken: syncResult.nextPageToken || null,
+        hasMore: syncResult.hasMore || false
+      };
     } catch (error) {
       if (error.originalError?.response?.data?.error === 'invalid_grant') {
         logger.warn(`Account ${account.id} has an invalid grant. Attempting token refresh.`);
@@ -325,7 +300,20 @@ class EmailService {
               await this.saveEmails(account.id, syncResult.messages);
             }
 
-            return { synced: syncResult.processed };
+            // Store the nextPageToken for future fetch more operations
+            if (syncResult.nextPageToken) {
+              await db.query(
+                'UPDATE email_accounts SET sync_cursor = $1, updated_at = NOW() WHERE id = $2',
+                [syncResult.nextPageToken, account.id]
+              );
+              logger.info(`Stored nextPageToken for account ${account.id}: ${syncResult.nextPageToken}`);
+            }
+
+            return { 
+              synced: syncResult.processed,
+              nextPageToken: syncResult.nextPageToken || null,
+              hasMore: syncResult.hasMore || false
+            };
           } else {
             throw new Error('Token refresh returned invalid credentials');
           }
@@ -801,6 +789,252 @@ class EmailService {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Fetch more emails for a specific account using pagination
+   */
+  async fetchMoreEmails(accountId, options = {}) {
+    try {
+      const {
+        maxEmails = 100, // Default to smaller chunks
+        pageToken = null,
+        sinceDate = null
+      } = options;
+
+      logger.info(`Fetching more emails for account ${accountId}`, {
+        maxEmails,
+        pageToken: pageToken ? 'present' : 'none',
+        sinceDate
+      });
+
+      // Get account details
+      const accountQuery = 'SELECT * FROM email_accounts WHERE id = $1';
+      const accountResult = await db.query(accountQuery, [accountId]);
+      
+      if (accountResult.rows.length === 0) {
+        throw new Error('Account not found');
+      }
+
+      const account = accountResult.rows[0];
+
+      // If no pageToken provided, try to get it from the stored sync_cursor
+      let actualPageToken = pageToken;
+      if (!actualPageToken && account.sync_cursor) {
+        actualPageToken = account.sync_cursor;
+        logger.info(`Using stored pageToken for account ${accountId}: ${actualPageToken}`);
+      }
+
+      // Create a processing job for tracking progress
+      const jobId = await this.createProcessingJob(accountId, 'email_fetch_more', {
+        maxEmails,
+        pageToken: actualPageToken ? 'present' : 'none',
+        sinceDate
+      });
+
+      try {
+        let result;
+        
+        if (account.provider === 'gmail') {
+          result = await this.fetchMoreGmailEmails(account, maxEmails, actualPageToken, sinceDate, jobId);
+        } else if (account.provider === 'outlook') {
+          result = await this.fetchMoreOutlookEmails(account, maxEmails, actualPageToken, sinceDate, jobId);
+        } else {
+          throw new Error(`Unsupported provider: ${account.provider}`);
+        }
+
+        // Complete the processing job
+        await this.completeProcessingJob(jobId, 'completed', {
+          synced: result.synced || 0,
+          hasMore: result.hasMore || false,
+          nextPageToken: result.nextPageToken || null
+        });
+
+        return {
+          success: true,
+          synced: result.synced || 0,
+          hasMore: result.hasMore || false,
+          nextPageToken: result.nextPageToken || null,
+          message: result.message || 'Emails fetched successfully'
+        };
+
+      } catch (error) {
+        // Mark the job as failed
+        await this.completeProcessingJob(jobId, 'failed', {
+          error: error.message
+        });
+        throw error;
+      }
+
+    } catch (error) {
+      logger.error(`Failed to fetch more emails for account ${accountId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch more Gmail emails with pagination
+   */
+  async fetchMoreGmailEmails(account, maxEmails, pageToken, sinceDate, jobId) {
+    const gmailService = new (require('./gmailService'))();
+
+    // Decrypt the tokens before using them
+    const decryptedAccessToken = decrypt(account.access_token);
+    const decryptedRefreshToken = decrypt(account.refresh_token);
+
+    gmailService.setCredentials({
+      access_token: decryptedAccessToken,
+      refresh_token: decryptedRefreshToken,
+      expiry_date: account.token_expires_at
+    });
+
+    try {
+      // Use the new fetchMoreEmails method for pagination
+      const syncResult = await gmailService.fetchMoreEmails(account.id, { 
+        maxEmails,
+        pageToken,
+        sinceDate,
+        onProgress: (processed, total) => {
+          // Update processing job progress
+          this.updateProcessingJobProgress(jobId, {
+            processed,
+            total,
+            percentage: total > 0 ? Math.round((processed / total) * 100) : 0
+          });
+        }
+      });
+
+      if (syncResult.messages && syncResult.messages.length > 0) {
+        await this.saveEmails(account.id, syncResult.messages);
+      }
+
+      // Store the new nextPageToken for future fetch more operations
+      if (syncResult.nextPageToken) {
+        await db.query(
+          'UPDATE email_accounts SET sync_cursor = $1, updated_at = NOW() WHERE id = $2',
+          [syncResult.nextPageToken, account.id]
+        );
+        logger.info(`Updated sync_cursor for account ${account.id}: ${syncResult.nextPageToken}`);
+      }
+
+      return {
+        synced: syncResult.processed || 0,
+        hasMore: syncResult.hasMore || false,
+        nextPageToken: syncResult.nextPageToken || null,
+        message: syncResult.message || 'No emails fetched'
+      };
+
+    } catch (error) {
+      logger.error(`Gmail fetch more failed for account ${account.id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch more Outlook emails with pagination (placeholder)
+   */
+  async fetchMoreOutlookEmails(account, maxEmails, pageToken, sinceDate, jobId) {
+    // TODO: Implement Outlook pagination
+    throw new Error('Outlook pagination not yet implemented');
+  }
+
+  /**
+   * Create a new processing job
+   */
+  async createProcessingJob(accountId, jobType, metadata = {}) {
+    try {
+      const query = `
+        INSERT INTO processing_jobs (
+          account_id, job_type, status, parameters, 
+          total_items, processed_items, progress,
+          started_at, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())
+        RETURNING id
+      `;
+      
+      const result = await db.query(query, [
+        accountId,
+        jobType,
+        'processing',
+        JSON.stringify(metadata),
+        metadata.maxEmails || 0,
+        0,
+        0
+      ]);
+      
+      logger.info(`Created processing job ${result.rows[0].id} for account ${accountId}`, {
+        jobType,
+        metadata
+      });
+      
+      return result.rows[0].id;
+    } catch (error) {
+      logger.error(`Failed to create processing job for account ${accountId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update processing job progress
+   */
+  async updateProcessingJobProgress(jobId, progress) {
+    try {
+      const query = `
+        UPDATE processing_jobs 
+        SET 
+          processed_items = $1,
+          total_items = $2,
+          progress = $3,
+          updated_at = NOW()
+        WHERE id = $4
+      `;
+      
+      await db.query(query, [
+        progress.processed || 0,
+        progress.total || 0,
+        progress.percentage || 0,
+        jobId
+      ]);
+      
+      logger.debug(`Updated processing job ${jobId} progress`, progress);
+    } catch (error) {
+      logger.error(`Failed to update processing job ${jobId} progress:`, error);
+      // Don't throw error for progress updates
+    }
+  }
+
+  /**
+   * Complete a processing job
+   */
+  async completeProcessingJob(jobId, status, result = {}) {
+    try {
+      const query = `
+        UPDATE processing_jobs 
+        SET 
+          status = $1,
+          processed_items = $2,
+          total_items = $3,
+          progress = $4,
+          parameters = $5,
+          completed_at = NOW(),
+          updated_at = NOW()
+        WHERE id = $6
+      `;
+      
+      await db.query(query, [
+        status,
+        result.synced || 0,
+        result.synced || 0, // For fetch more, total = synced
+        status === 'completed' ? 100 : 0,
+        JSON.stringify(result),
+        jobId
+      ]);
+      
+      logger.info(`Completed processing job ${jobId} with status ${status}`, result);
+    } catch (error) {
+      logger.error(`Failed to complete processing job ${jobId}:`, error);
+      throw error;
     }
   }
 }

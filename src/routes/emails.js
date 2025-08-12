@@ -526,26 +526,24 @@ router.get('/stats/filtering', async (req, res) => {
       email_stats AS (
         SELECT
           COUNT(*) as total_emails,
-          COUNT(*) FILTER (WHERE e.thread_id IN (SELECT thread_id FROM conversation_threads)) as conversation_emails,
+          COUNT(*) FILTER (WHERE e.thread_id IN (SELECT thread_id FROM conversation_threads) OR e.has_response = true) as conversation_emails,
           COUNT(*) FILTER (WHERE e.thread_id NOT IN (SELECT thread_id FROM conversation_threads) OR e.thread_id IS NULL) as standalone_emails,
-          COUNT(*) FILTER (WHERE e.is_processed = true) as processed_emails,
-          COUNT(*) FILTER (WHERE e.is_processed = false) as pending_emails,
+          COUNT(*) FILTER (WHERE e.processed_for_faq = true) as processed_emails,
+          COUNT(*) FILTER (WHERE e.processed_for_faq = false) as pending_emails,
           COUNT(*) FILTER (WHERE
-            e.is_processed = false AND
-            (e.thread_id IN (SELECT thread_id FROM conversation_threads) OR
-             EXISTS (
-               SELECT 1 FROM emails reply_email
-               JOIN connected_emails ce ON reply_email.sender_email = ce.email_address
-               WHERE reply_email.thread_id = e.thread_id
-                 AND reply_email.id != e.id
-                 AND reply_email.sent_at > e.sent_at
-             ) OR
-             EXISTS (
-               SELECT 1 FROM emails original_email
-               JOIN connected_emails ce ON original_email.sender_email = ce.email_address
-               WHERE original_email.thread_id = e.thread_id
-                 AND original_email.sent_at < e.sent_at
-             ))
+            e.processed_for_faq = false AND
+            e.body_text IS NOT NULL AND
+            LENGTH(e.body_text) > 20 AND
+            e.sender_email IS NOT NULL AND
+            e.sender_email NOT IN (SELECT email_address FROM connected_emails) AND
+            e.sender_email NOT LIKE '%extcabinets.com' AND
+            e.sender_email NOT LIKE '%@extcabinets.com' AND
+            e.sender_email NOT LIKE '%crm%' AND
+            e.sender_email NOT LIKE '%notification%' AND
+            (
+              e.thread_id IN (SELECT thread_id FROM conversation_threads) OR
+              e.has_response = true
+            )
           ) as valid_for_processing
         FROM emails e
         JOIN email_accounts ea ON e.account_id = ea.id

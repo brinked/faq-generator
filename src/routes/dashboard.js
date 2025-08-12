@@ -123,6 +123,7 @@ router.get('/processing-status', async (req, res) => {
   try {
     const db = require('../config/database');
     
+    // Get detailed processing status with email counts and job progress
     const query = `
       SELECT 
         ea.id,
@@ -130,6 +131,7 @@ router.get('/processing-status', async (req, res) => {
         ea.provider,
         ea.status as account_status,
         ea.last_sync_at,
+        ea.created_at as account_created_at,
         pj.id as job_id,
         pj.job_type,
         pj.status as job_status,
@@ -137,7 +139,58 @@ router.get('/processing-status', async (req, res) => {
         pj.total_items,
         pj.processed_items,
         pj.started_at,
-        pj.error_message
+        pj.completed_at,
+        pj.error_message,
+        pj.created_at as job_created_at,
+        pj.updated_at as job_updated_at,
+        (
+          SELECT COUNT(*) FROM emails 
+          WHERE account_id = ea.id
+        ) as total_emails,
+        (
+          SELECT COUNT(*) FROM emails 
+          WHERE account_id = ea.id AND is_processed = false
+        ) as pending_emails,
+        (
+          SELECT COUNT(*) FROM emails 
+          WHERE account_id = ea.id AND is_processed = true
+        ) as processed_emails,
+        (
+          SELECT COUNT(*) FROM questions 
+          WHERE email_id IN (
+            SELECT id FROM emails WHERE account_id = ea.id
+          )
+        ) as total_questions,
+        (
+          SELECT COUNT(*) FROM questions 
+          WHERE email_id IN (
+            SELECT id FROM emails WHERE account_id = ea.id
+          ) AND is_customer_question = true
+        ) as customer_questions,
+        (
+          SELECT COUNT(*) FROM emails 
+          WHERE account_id = ea.id
+            AND processed_for_faq = false
+            AND body_text IS NOT NULL
+            AND LENGTH(body_text) > 20
+            AND sender_email IS NOT NULL
+            AND sender_email NOT LIKE '%extcabinets.com'
+            AND sender_email NOT LIKE '%@extcabinets.com'
+            AND sender_email NOT LIKE '%crm%'
+            AND sender_email NOT LIKE '%notification%'
+            AND (
+              thread_id IN (
+                SELECT DISTINCT e1.thread_id
+                FROM emails e1
+                JOIN emails e2 ON e1.thread_id = e2.thread_id
+                WHERE e1.thread_id IS NOT NULL
+                  AND e1.thread_id != ''
+                  AND e1.sender_email != e2.sender_email
+                  AND e2.sender_email IN (SELECT email_address FROM email_accounts WHERE status = 'active')
+              )
+              OR has_response = true
+            )
+        ) as valid_pending_emails
       FROM email_accounts ea
       LEFT JOIN LATERAL (
         SELECT *
@@ -151,9 +204,61 @@ router.get('/processing-status', async (req, res) => {
     
     const result = await db.query(query);
     
+    // Calculate overall statistics
+    const overallStats = {
+      total_accounts: result.rows.length,
+      active_accounts: result.rows.filter(a => a.account_status === 'active').length,
+      total_emails: result.rows.reduce((sum, a) => sum + parseInt(a.total_emails || 0), 0),
+      pending_emails: result.rows.reduce((sum, a) => sum + parseInt(a.valid_pending_emails || 0), 0), // Use valid pending emails
+      processed_emails: result.rows.reduce((sum, a) => sum + parseInt(a.processed_emails || 0), 0),
+      total_questions: result.rows.reduce((sum, a) => sum + parseInt(a.total_questions || 0), 0),
+      customer_questions: result.rows.reduce((sum, a) => sum + parseInt(a.customer_questions || 0), 0),
+      active_jobs: result.rows.filter(a => a.job_status === 'processing').length,
+      completed_jobs: result.rows.filter(a => a.job_status === 'completed').length,
+      failed_jobs: result.rows.filter(a => a.job_status === 'failed').length,
+      // Add filtered email statistics for FAQ Processing Center (properly calculate processed count)
+      filtered_total_emails: result.rows.reduce((sum, a) => sum + parseInt(a.valid_pending_emails || 0), 0) + result.rows.reduce((sum, a) => sum + parseInt(a.processed_emails || 0), 0), // Total valid emails (pending + processed)
+      filtered_pending_emails: result.rows.reduce((sum, a) => sum + parseInt(a.valid_pending_emails || 0), 0), // Valid pending emails
+      filtered_processed_emails: result.rows.reduce((sum, a) => sum + parseInt(a.processed_emails || 0), 0) // Actual processed emails count
+    };
+    
+    // Format the response for better frontend consumption
+    const accounts = result.rows.map(row => ({
+      id: row.id,
+      email_address: row.email_address,
+      provider: row.provider,
+      status: row.account_status,
+      last_sync_at: row.last_sync_at,
+      created_at: row.account_created_at,
+      email_stats: {
+        total: parseInt(row.total_emails || 0),
+        pending: parseInt(row.pending_emails || 0),
+        processed: parseInt(row.processed_emails || 0)
+      },
+      question_stats: {
+        total: parseInt(row.total_questions || 0),
+        customer: parseInt(row.customer_questions || 0)
+      },
+      current_job: row.job_id ? {
+        id: row.job_id,
+        type: row.job_type,
+        status: row.job_status,
+        progress: row.progress || 0,
+        total_items: row.total_items || 0,
+        processed_items: row.processed_items || 0,
+        started_at: row.started_at,
+        completed_at: row.completed_at,
+        error_message: row.error_message,
+        created_at: row.job_created_at,
+        updated_at: row.job_updated_at
+      } : null
+    }));
+    
     res.json({
       success: true,
-      accounts: result.rows
+      overall_stats: overallStats,
+      accounts: accounts,
+      timestamp: new Date().toISOString()
     });
     
   } catch (error) {
