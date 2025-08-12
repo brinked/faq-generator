@@ -493,7 +493,7 @@ const FAQProcessor = ({ socket, onProcessingComplete }) => {
 
       const data = await apiService.generateFAQs({
         minQuestionCount: 1,
-        maxFAQs: 500, // High limit to process most questions, backend will prioritize most important ones
+        maxFAQs: 100, // Increased from 20 to allow more FAQs to be generated
         forceRegenerate: false,
         autoFix: true
       });
