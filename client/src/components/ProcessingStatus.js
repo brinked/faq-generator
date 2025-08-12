@@ -18,7 +18,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
 
   useEffect(() => {
     if (status?.accounts) {
-      const processing = status.accounts.filter(acc => 
+      const processing = status.accounts.filter(acc =>
         acc.current_job && acc.current_job.status === 'processing'
       );
       setProcessingAccounts(processing);
@@ -36,7 +36,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
         [accountId]: { ...currentState, fetching: true }
       }));
 
-      toast.info(`Fetching more emails for ${accountEmail}...`);
+      toast.info(`Fetching more emails...`);
 
       const result = await apiService.fetchMoreEmails(accountId, {
         maxEmails: 100, // Fetch in smaller chunks of 100 emails
@@ -45,7 +45,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
 
       if (result.success) {
         const { hasMore, nextPageToken, message, synced } = result.result;
-        
+
         // Update page token for next fetch
         if (nextPageToken) {
           setPageTokens(prev => ({
@@ -67,7 +67,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
         }));
 
         if (synced > 0) {
-          toast.success(`Fetched ${synced} more emails from ${accountEmail}`);
+          toast.success(`Fetched ${synced} more emails`);
         } else {
           toast.info(message || 'No more emails to fetch');
         }
@@ -82,7 +82,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
       } else {
         // Handle API error response
         toast.error(`Failed to fetch more emails: ${result.message || 'Unknown error'}`);
-        
+
         setFetchMoreStates(prev => ({
           ...prev,
           [accountId]: { ...prev[accountId], fetching: false }
@@ -91,12 +91,12 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
     } catch (error) {
       console.error('Failed to fetch more emails:', error);
       toast.error(`Failed to fetch more emails: ${error.message || 'Network error'}`);
-      
+
       // Always reset fetching state on error
       setFetchMoreStates(prev => ({
         ...prev,
-        [accountId]: { 
-          ...prev[accountId], 
+        [accountId]: {
+          ...prev[accountId],
           fetching: false,
           lastMessage: 'Failed to fetch emails'
         }
@@ -160,7 +160,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
 
   const formatStatusMessage = (status) => {
     if (!status) return 'Ready to process emails';
-    
+
     switch (status.status) {
       case 'processing':
         return status.message || 'Processing emails...';
@@ -340,7 +340,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
                         {currentJob.progress}%
                       </span>
                     </div>
-                    
+
                     {/* Progress Bar */}
                     <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
                       <motion.div
@@ -350,7 +350,7 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
                         className="bg-blue-600 h-2 rounded-full"
                       />
                     </div>
-                    
+
                     {/* Progress Details */}
                     <div className="flex justify-between text-sm text-blue-700">
                       <span>
@@ -400,13 +400,13 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
                         </button>
                       </div>
                     </div>
-                    
+
                     {/* Fetch More Progress */}
                     {fetchMoreState.fetching && (
                       <div className="mt-3">
                         <div className="flex items-center space-x-2 text-sm text-blue-600">
                           <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                          <span>Fetching more emails from {account.provider}...</span>
+                          <span>Fetching more emails...</span>
                         </div>
                       </div>
                     )}
@@ -471,8 +471,8 @@ const ProcessingStatus = ({ status, connectedAccounts, onSyncEmails, onContinue,
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <span>
-            {processingAccounts.length > 0 
-              ? `Processing ${processingAccounts.length} account(s)...` 
+            {processingAccounts.length > 0
+              ? `Processing ${processingAccounts.length} account(s)...`
               : 'Sync All Emails'
             }
           </span>

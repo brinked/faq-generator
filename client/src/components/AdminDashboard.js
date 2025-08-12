@@ -343,44 +343,110 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-pulse-slow"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-pulse-slow" style={{animationDelay: '2s'}}></div>
+        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-gradient-to-r from-yellow-400 to-red-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-pulse-slow" style={{animationDelay: '4s'}}></div>
+      </div>
+
       <Header
         user={user}
         onLogout={handleLogout}
         onSettings={() => setShowSettings(true)}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Step Indicator */}
-        <div className="mb-8 animate-fade-in-up">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="mb-8"
+        >
           <StepIndicator steps={STEPS} currentStep={currentStep} />
-        </div>
+        </motion.div>
 
-        {/* Debug Info */}
-        <div className="mb-6 p-4 glass rounded-xl shadow-lg border border-white/20 text-sm text-gray-700 animate-slide-in-right">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="font-semibold text-gray-800 flex items-center">
-              <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Debug Info:
-            </span>
-            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
-              Step: {currentStep}
-            </span>
-            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
-              Accounts: {connectedAccounts.length}
-            </span>
-            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full font-medium">
-              FAQs: {faqs.length}
-            </span>
-            {processingStatus && (
-              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full font-medium">
-                Status: {processingStatus.status}
-              </span>
-            )}
+        {/* Enhanced Debug Info Panel */}
+        <motion.div 
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
+          className="mb-8 relative"
+        >
+          <div className="glass rounded-2xl shadow-lg border border-white/30 p-6 backdrop-blur-xl relative overflow-hidden">
+            {/* Subtle gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 pointer-events-none"></div>
+            
+            <div className="relative">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">System Overview</h3>
+                    <p className="text-sm text-gray-600">Real-time status and progress tracking</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-center p-3 bg-white/60 rounded-xl backdrop-blur-sm border border-white/30"
+                  >
+                    <div className="text-2xl font-bold text-blue-600 mb-1">{currentStep}</div>
+                    <div className="text-xs text-gray-600 font-medium">Current Step</div>
+                  </motion.div>
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className="text-center p-3 bg-white/60 rounded-xl backdrop-blur-sm border border-white/30"
+                  >
+                    <div className="text-2xl font-bold text-green-600 mb-1">{connectedAccounts.length}</div>
+                    <div className="text-xs text-gray-600 font-medium">Connected Accounts</div>
+                  </motion.div>
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-center p-3 bg-white/60 rounded-xl backdrop-blur-sm border border-white/30"
+                  >
+                    <div className="text-2xl font-bold text-purple-600 mb-1">{faqs.length}</div>
+                    <div className="text-xs text-gray-600 font-medium">Generated FAQs</div>
+                  </motion.div>
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.6 }}
+                    className="text-center p-3 bg-white/60 rounded-xl backdrop-blur-sm border border-white/30"
+                  >
+                    <div className="flex items-center justify-center h-8">
+                      {processingStatus?.overall_stats?.active_jobs > 0 ? (
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-medium text-orange-600">Processing</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-sm font-medium text-green-600">Ready</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-600 font-medium">System Status</div>
+                  </motion.div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Main Content */}
         <AnimatePresence mode="wait">
@@ -466,70 +532,133 @@ const AdminDashboard = () => {
           )}
         </AnimatePresence>
 
-        {/* Navigation */}
-        <div className="mt-12 glass rounded-2xl shadow-xl border border-white/30 p-6 backdrop-blur-xl">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <button
-              onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-              disabled={currentStep === 1}
-              className="w-full sm:w-auto group relative overflow-hidden bg-white/80 hover:bg-white text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl btn-hover-lift focus-ring"
-            >
-              <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-              </svg>
-              <span>Previous Step</span>
-            </button>
+        {/* Enhanced Navigation */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="mt-12 relative"
+        >
+          <div className="glass rounded-2xl shadow-xl border border-white/30 p-8 backdrop-blur-xl relative overflow-hidden">
+            {/* Decorative elements */}
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+            
+            <div className="relative">
+              <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+                {/* Previous Button */}
+                <motion.button
+                  onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
+                  disabled={currentStep === 1}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full lg:w-auto group relative overflow-hidden bg-white/90 hover:bg-white text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3 px-8 py-4 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl border border-white/50 hover:border-white"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-50 to-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                  </svg>
+                  <span className="relative z-10">Previous Step</span>
+                </motion.button>
 
-            <div className="hidden sm:flex items-center space-x-3 px-4 py-2 bg-white/60 rounded-full backdrop-blur-sm">
-              <div className="flex space-x-1">
-                {STEPS.map((step, index) => (
-                  <div
-                    key={step.id}
-                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                      index + 1 <= currentStep
-                        ? 'bg-blue-500 scale-125'
-                        : 'bg-gray-300'
-                    }`}
-                  />
-                ))}
+                {/* Step Progress Indicator */}
+                <div className="flex flex-col items-center space-y-4">
+                  {/* Desktop Progress */}
+                  <div className="hidden lg:flex items-center space-x-4 px-6 py-3 bg-white/70 rounded-full backdrop-blur-sm border border-white/40">
+                    <div className="flex space-x-2">
+                      {STEPS.map((step, index) => (
+                        <motion.div
+                          key={step.id}
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: index * 0.1 }}
+                          className={`relative w-3 h-3 rounded-full transition-all duration-300 ${
+                            index + 1 <= currentStep
+                              ? 'bg-gradient-to-r from-blue-500 to-purple-500 scale-125 shadow-lg'
+                              : 'bg-gray-300'
+                          }`}
+                        >
+                          {index + 1 === currentStep && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-ping opacity-75"></div>
+                          )}
+                        </motion.div>
+                      ))}
+                    </div>
+                    <div className="text-sm font-semibold text-gray-700">
+                      Step {currentStep} of {STEPS.length}
+                    </div>
+                  </div>
+                  
+                  {/* Mobile Progress */}
+                  <div className="lg:hidden flex items-center space-x-3 px-4 py-2 bg-white/70 rounded-full backdrop-blur-sm border border-white/40">
+                    <div className="flex space-x-1">
+                      {STEPS.map((step, index) => (
+                        <div
+                          key={step.id}
+                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            index + 1 <= currentStep
+                              ? 'bg-gradient-to-r from-blue-500 to-purple-500'
+                              : 'bg-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs font-medium text-gray-700">
+                      {currentStep}/{STEPS.length}
+                    </span>
+                  </div>
+
+                  {/* Current Step Title */}
+                  <motion.div 
+                    key={currentStep}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-center"
+                  >
+                    <h3 className="font-semibold text-gray-900">{STEPS[currentStep - 1]?.title}</h3>
+                    <p className="text-sm text-gray-600">{STEPS[currentStep - 1]?.description}</p>
+                  </motion.div>
+                </div>
+
+                {/* Next Button */}
+                <motion.button
+                  onClick={() => {
+                    if (currentStep === 4) {
+                      // Complete button: Show success message and allow restart
+                      toast.success('FAQ management workflow completed successfully!');
+                      setCurrentStep(1); // Go back to step 1 to start over
+                    } else {
+                      const nextStep = Math.min(4, currentStep + 1);
+                      setCurrentStep(nextStep);
+                    }
+                  }}
+                  disabled={(currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0) || (currentStep === 4)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full lg:w-auto group relative overflow-hidden bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3 px-8 py-4 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl border border-blue-400/50"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <span className="relative z-10">
+                    {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
+                     currentStep === 2 && faqs.length > 0 ? 'View Generated FAQs' :
+                     currentStep === 3 ? 'Manage FAQs' :
+                     currentStep === 4 ? 'Complete Workflow' : 'Next Step'}
+                  </span>
+                  {currentStep === 4 ? (
+                    <svg className="w-5 h-5 transition-transform group-hover:rotate-90 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  ) : currentStep < 4 && (
+                    <svg className="w-5 h-5 transition-transform group-hover:translate-x-1 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                  )}
+                </motion.button>
               </div>
-              <span className="text-sm font-medium text-gray-700">
-                Step {currentStep} of {STEPS.length}
-              </span>
             </div>
-
-            <button
-              onClick={() => {
-                if (currentStep === 4) {
-                  // Complete button: Show success message and allow restart
-                  toast.success('FAQ management workflow completed successfully!');
-                  setCurrentStep(1); // Go back to step 1 to start over
-                } else {
-                  const nextStep = Math.min(4, currentStep + 1);
-                  setCurrentStep(nextStep);
-                }
-              }}
-              disabled={(currentStep === 1 && connectedAccounts.length === 0) || (currentStep === 2 && faqs.length === 0) || (currentStep === 4)}
-              className="w-full sm:w-auto group relative overflow-hidden bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl btn-hover-lift focus-ring"
-            >
-              <span>
-                {currentStep === 1 && connectedAccounts.length > 0 ? 'Continue to Processing' :
-                 currentStep === 2 && faqs.length > 0 ? 'View Generated FAQs' :
-                 currentStep === 3 ? 'Manage FAQs' :
-                 currentStep === 4 ? 'Complete' : 'Next Step'}
-              </span>
-              {currentStep === 4 ? (
-                <svg className="w-5 h-5 transition-transform group-hover:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              ) : currentStep < 4 && (
-                <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
-              )}
-            </button>
           </div>
-        </div>
+        </motion.div>
       </main>
 
       {/* Settings Modal */}

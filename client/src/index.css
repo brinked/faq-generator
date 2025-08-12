@@ -166,7 +166,7 @@ code {
   @apply text-sm text-gray-600;
 }
 
-/* Responsive design improvements */
+/* Enhanced responsive design improvements */
 @media (max-width: 768px) {
   .card {
     @apply p-4;
@@ -179,6 +179,42 @@ code {
   .filter-container {
     @apply grid-cols-1 gap-3;
   }
+
+  /* Mobile-specific improvements for admin dashboard */
+  .glass {
+    @apply p-4;
+  }
+
+  /* Adjust step indicator for mobile */
+  .step-indicator-mobile {
+    @apply flex-col space-y-6;
+  }
+
+  /* Mobile navigation improvements */
+  .mobile-nav-button {
+    @apply w-full text-center py-4;
+  }
+
+  /* Responsive FAQ cards */
+  .faq-card-mobile {
+    @apply mx-2 p-4;
+  }
+
+  /* Mobile action buttons */
+  .mobile-action-buttons {
+    @apply flex-col space-y-2 opacity-100;
+  }
+}
+
+/* Tablet improvements */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .tablet-grid {
+    @apply grid-cols-2 gap-4;
+  }
+  
+  .tablet-nav {
+    @apply flex-col lg:flex-row;
+  }
 }
 
 /* Mobile menu improvements */
@@ -190,4 +226,33 @@ code {
   .mobile-menu-content {
     @apply relative z-50;
   }
+
+  /* Enhanced mobile step indicator */
+  .mobile-step-progress {
+    @apply hidden;
+  }
+
+  .mobile-step-dots {
+    @apply flex justify-center space-x-2 mt-4;
+  }
+}
+
+/* Performance optimizations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-ping,
+  .animate-spin {
+    animation: none;
+  }
+  
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Dark mode support preparation */
+@media (prefers-color-scheme: dark) {
+  /* Future dark mode styles can be added here */
 }

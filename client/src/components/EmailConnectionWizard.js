@@ -17,19 +17,19 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
     if (connectedAccounts.length === 0) return;
 
     let pollingInterval;
-    
+
     const startPolling = () => {
       setIsPolling(true);
       pollingInterval = setInterval(async () => {
         try {
           const status = await apiService.getProcessingStatus();
           setProcessingStatus(status);
-          
+
           // Stop polling if no active jobs
-          const hasActiveJobs = status.accounts?.some(acc => 
+          const hasActiveJobs = status.accounts?.some(acc =>
             acc.current_job && acc.current_job.status === 'processing'
           );
-          
+
           if (!hasActiveJobs) {
             setIsPolling(false);
             clearInterval(pollingInterval);
@@ -49,10 +49,10 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
 
     // Check if there are any active processing jobs
     if (processingStatus?.accounts) {
-      const hasActiveJobs = processingStatus.accounts.some(acc => 
+      const hasActiveJobs = processingStatus.accounts.some(acc =>
         acc.current_job && acc.current_job.status === 'processing'
       );
-      
+
       if (hasActiveJobs && !isPolling) {
         startPolling();
       } else if (!hasActiveJobs && isPolling) {
@@ -91,7 +91,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
         [accountId]: { ...currentState, fetching: true }
       }));
 
-      toast.info(`Fetching more emails for ${accountEmail}...`);
+      toast.info(`Fetching more emails...`);
 
       const result = await apiService.fetchMoreEmails(accountId, {
         maxEmails: 100, // Fetch in smaller chunks of 100 emails
@@ -100,7 +100,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
 
       if (result.success) {
         const { hasMore, nextPageToken, message, synced } = result.result;
-        
+
         // Update page token for next fetch
         if (nextPageToken) {
           setPageTokens(prev => ({
@@ -122,7 +122,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
         }));
 
         if (synced > 0) {
-          toast.success(`Fetched ${synced} more emails from ${accountEmail}`);
+          toast.success(`Fetched ${synced} more emails`);
         } else {
           toast.info(message || 'No more emails to fetch');
         }
@@ -137,7 +137,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
       } else {
         // Handle API error response
         toast.error(`Failed to fetch more emails: ${result.message || 'Unknown error'}`);
-        
+
         setFetchMoreStates(prev => ({
           ...prev,
           [accountId]: { ...prev[accountId], fetching: false }
@@ -146,12 +146,12 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
     } catch (error) {
       console.error('Failed to fetch more emails:', error);
       toast.error(`Failed to fetch more emails: ${error.message || 'Network error'}`);
-      
+
       // Always reset fetching state on error
       setFetchMoreStates(prev => ({
         ...prev,
-        [accountId]: { 
-          ...prev[accountId], 
+        [accountId]: {
+          ...prev[accountId],
           fetching: false,
           lastMessage: 'Failed to fetch emails'
         }
@@ -385,7 +385,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
       )}
 
       {/* Email Processing Progress */}
-      {processingStatus?.accounts && processingStatus.accounts.some(acc => 
+      {processingStatus?.accounts && processingStatus.accounts.some(acc =>
         acc.current_job && acc.current_job.status === 'processing'
       ) && (
         <motion.div
@@ -422,7 +422,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
                       {account.current_job.progress}%
                     </span>
                   </div>
-                  
+
                   {/* Progress Bar */}
                   <div className="w-full bg-blue-200 rounded-full h-2 mb-3">
                     <motion.div
@@ -432,7 +432,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
                       className="bg-blue-600 h-2 rounded-full"
                     />
                   </div>
-                  
+
                   {/* Progress Details */}
                   <div className="flex justify-between text-sm text-blue-700">
                     <span>
@@ -466,7 +466,7 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
                           <div className="text-xs text-gray-500">Pending</div>
                         </div>
                       </div>
-                    
+
                       {/* Fetch More Button */}
                       <div className="mt-4 pt-3 border-t border-blue-200">
                         <div className="flex items-center justify-between">
@@ -493,17 +493,17 @@ const EmailConnectionWizard = ({ connectedAccounts, onAccountConnected, onAccoun
                             )}
                           </button>
                         </div>
-                        
+
                         {/* Fetch More Progress */}
                         {fetchMoreStates[account.id]?.fetching && (
                           <div className="mt-2">
                             <div className="flex items-center space-x-2 text-xs text-blue-600">
                               <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                              <span>Fetching more emails from {account.provider}...</span>
+                              <span>Fetching more emails...</span>
                             </div>
                           </div>
                         )}
-                        
+
                         {/* Last Fetch Result */}
                         {fetchMoreStates[account.id]?.lastFetchCount && (
                           <div className="mt-2 text-xs text-green-600">
